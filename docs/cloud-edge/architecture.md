@@ -2,17 +2,17 @@
   <strong>English</strong> · <a href="architecture.zh_CN.md">简体中文</a>
 </p>
 
-# Cloud-Edge Architecture & Server-Side BFF Blueprint
+# Cloud-Edge Thin-Client Architecture & Server-Side BFF Specification
 
-> **The Missing Half of AI Passport**: Official repository documentation focuses on standalone firmware, minimal test menus, and isolated offline demos. This document defines the **server-augmented thin-client architecture**—leveraging a self-hosted server or personal computer to transcend hardware boundaries without violating ESP32-C3 memory limits.
+> **Scope & Target**: This document specifies the hardware-software communication standards for the FoloToy AI Passport (ESP32-C3) operating as a **Server-Augmented Thin Client** paired with a self-hosted server or cloud BFF. Use this architecture for network voice intercom, AI flashcards, audio/video streaming, LLM dialogs, and low-code integrations.
 >
-> *(For board-level hardware facts, pin mappings, and electrical specs, refer directly to official sources: `components/bsp/include/bsp_pins.h` and `docs/hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md`.)*
+> *(Note: Hardware pin definitions, bus ownership, and electrical specifications strictly follow: `components/bsp/include/bsp_pins.h` and `docs/hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md`.)*
 
 ---
 
-## 1. The Core Paradigm: Physical Persona + Cloud Super-Brain
+## 1. Core Architecture Paradigm: Physical Client + Cloud Brain (BFF)
 
-The official repository treats the AI Passport primarily as a standalone MCU device. With a dedicated server, we invert the system hierarchy:
+The system adopts a decoupled client-server hierarchy: the ESP32-C3 acts as a lightweight physical interface handling sensor inputs, screen rendering, and audio I/O; the external server or PC handles heavy compute, LLM orchestration, and business state:
 
 ```text
 ┌──────────────────────────────────────────────┐
@@ -178,7 +178,7 @@ Regardless of the server language or framework used, communication with the ESP3
 ### 7.1 Auxiliary REST API Contract (Strictly for Cold-Path Operations)
 
 > [!WARNING]
-> **Boundary Warning**: REST APIs are strictly permitted for one-time initialization, Wi-Fi provisioning checks, or low-frequency telemetry. **PROHIBITED** for voice streaming, real-time query turns, live LLM token streaming, or card state synchronization.
+> **Boundary Warning**: REST APIs are strictly permitted for one-time initialization, Wi-Fi provisioning checks, or low-frequency telemetry. **PROHIBITED** for voice streaming, real-time query turns, live LLM token streaming, long-text paging, or card state synchronization.
 
 #### 1. HUD Telemetry Endpoint (BFF Data Slimming)
 * **Request**: `GET /api/v1/hud?badge_id={id}`
@@ -194,21 +194,7 @@ Regardless of the server language or framework used, communication with the ESP3
   }
   ```
 
-#### 2. Virtual Viewport Pagination Endpoint (Cold Fallback Channel)
-* **Request**: `GET /api/v1/text/page?badge_id={id}&doc_id={id}&offset={n}&limit=200`
-* **Constraint**: The 240×320 screen holds ~150–200 characters per viewport; fetch only one viewport at a time (recommend preferring `{"req":"page"}` inside WebSocket text frames).
-* **Payload Schema**:
-  ```json
-  {
-    "doc_id": "conv_9821",
-    "offset": 2,
-    "total_pages": 12,
-    "has_next": true,
-    "text": "The next 200 characters of text content to render in the current viewport..."
-  }
-  ```
-
-#### 3. Passive NFC Tap Webhook Endpoint
+#### 2. Passive NFC Tap Webhook Endpoint
 * **Request**: `GET /t/{badge_id}`
 * **Trigger**: A smartphone taps the passive NTAG213 tag and opens this URL.
 * **Behavior**: The server asynchronously dispatches an alert event to the badge's WebSocket connection and returns a web page to the mobile browser.
@@ -217,20 +203,25 @@ Regardless of the server language or framework used, communication with the ESP3
 
 ### 7.2 Core WebSocket Full-Duplex Multiplexing Contract (`/ws/badge/{badge_id}`)
 
-All high-frequency, bidirectional streaming traffic is multiplexed over this single WSS connection, separated by frame types:
+All high-frequency, bidirectional streaming traffic is multiplexed over this single WSS connection. The board features three physical buttons (`UP`, `DOWN`, `OK`) sharing a single resistor ladder on GPIO0 (ADC1_CH0). PTT voice streaming is typically mapped to **holding the `OK` button**, while `UP`/`DOWN` buttons drive viewport pagination and scrolling.
+
+Data streams are strictly separated by frame types:
 
 #### 1. Upstream Data (Client ──► Server)
-| Frame Type | Content & Format | Specification & Timing |
+| Frame Type | Content & Format | Specification & Semantics |
 | :--- | :--- | :--- |
-| **Binary Frame** | Microphone voice capture stream | 16 kHz, 16-bit, mono raw PCM. Flush 1024 bytes (32ms) per packet. |
-| **Text Frame** | Physical button events & telemetry | JSON format: `{"type":"btn","key":"ok","gesture":"short"}` |
+| **Binary Frame** | Microphone voice capture stream | 16 kHz, 16-bit, mono raw PCM. When `OK` is held, flush 1024 bytes (32ms) per packet. |
+| **Text Frame (Button Event)** | Physical button events | JSON format: `{"type":"btn","key":"ok","gesture":"short"}` |
+| **Text Frame (PTT Control)** | PTT voice stream start/end markers | Press OK: `{"type":"ptt_start"}`; release OK: `{"type":"ptt_end"}` |
+| **Text Frame (Paging Req)** | Viewport paging request | Triggered by UP/DOWN: `{"type":"page_req","doc_id":"conv_9821","offset":2}` |
 
 #### 2. Downstream Data (Server ──► Client)
 | Frame Type | Content & Format | Client Processing Action |
 | :--- | :--- | :--- |
 | **Text Frame (Text Stream)** | Live typewriter token delta:<br>`{"type":"delta","text":"char"}` | Appends to the screen's LVGL label buffer. Constant memory. |
-| **Text Frame (Card Model)** | Structured educational flashcard:<br>`{"type":"card_word", "word":"apple", ...}`<br>`{"type":"card_char", "char":"\\u821E", "pinyin":"wu", ...}` | Parses and renders to LVGL card widget layout for instant learning feedback. |
-| **Binary Frame (Audio Stream)** | MP3 audio stream slices (`0x02` header) | Written into the 16KB ring buffer; pre-buffers 4KB before I2S start. |
+| **Text Frame (Viewport Page)** | Viewport page response slice:<br>`{"type":"page_resp","doc_id":"conv_9821","offset":2,"total":12,"text":"..."}` | Swaps visible label text. Constant < 1 KB memory, zero TLS re-handshake overhead. |
+| **Text Frame (Card Model)** | Structured educational/status flashcard:<br>`{"type":"card_word", "word":"apple", ...}`<br>`{"type":"card_char", "char":"\\u821E", "pinyin":"wu", ...}` | Parses and renders to LVGL card widget layout for instant learning feedback. |
+| **Binary Frame (Audio Stream)** | MP3 audio stream slices (`0x02` header) | Written into the 16KB ring buffer; pre-buffers 4KB before Helix software decode & I2S playback. |
 | **Binary Frame (Glyph/Bitmap Stream)** | 1-bit / 2-bit RLE bitmap frame (`0x03` header) | Renders uncached Chinese characters, stroke orders, or retro animation directly to SPI display RAM. |
 | **Text Frame (Control Command)** | Force alert / screen override:<br>`{"type":"alert","level":"critical","msg":"text"}` | Triggers audio beep and displays emergency red HUD. |
 

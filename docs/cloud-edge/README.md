@@ -4,9 +4,9 @@
 
 # Cloud-Edge Architecture & Engineering Blueprint
 
-> **Beyond Standalone Hardware**: A definitive technical guide for transforming the FoloToy AI Passport into a **Server-Supercharged Thin Client** powered by a self-hosted server or personal computer.
+> **Cloud-Edge Engineering Guide**: Technical guidelines for deploying the FoloToy AI Passport (ESP32-C3) as a **Server-Augmented Thin Client** paired with a self-hosted server or cloud BFF.
 
-Official repository documentation focuses on standalone firmware, local offline menus, and isolated demo features. This directory documents the **cloud-edge collaborative architecture** that turns the ESP32-C3 into an ultra-low-latency, physical avatar for cloud AI and automated services, without violating no-PSRAM memory boundaries.
+This directory collects engineering best practices and wire protocol standards for cloud-edge applications, guiding how to implement real-time voice streaming, AI interactive cards, audio streaming, and automation without exceeding the ESP32-C3 memory limits.
 
 ---
 

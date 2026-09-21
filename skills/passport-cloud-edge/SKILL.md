@@ -1,16 +1,21 @@
 ---
 name: passport-cloud-edge
-description: Design and implement cloud-edge collaborative applications for FoloToy AI Passport, pairing the ESP32-C3 thin client with a backend server/BFF via WebSocket and REST APIs while strictly respecting hardware memory, audio streaming, and display constraints.
+description: Design and implement cloud-edge collaborative and thin-client applications for FoloToy AI Passport. Covers self-hosted server/BFF, WebSocket bidirectional streaming, real-time voice intercom, AI flashcards, LLM dialogs, and low-code integrations while strictly respecting ESP32-C3 memory (no PSRAM) and audio streaming hardware constraints.
 ---
 
 <p align="right"><a href="SKILL.zh_CN.md">简体中文</a> · <strong>English</strong></p>
 
 # Cloud-Edge Collaborative Development Skill
 
-Use this workflow when designing or implementing networked, server-augmented, or AI-powered applications on the FoloToy AI Passport.
-The device functions as a **thin client / physical avatar** (sensors, display viewport, audio I/O), while the user's private server or PC acts as the **super-brain and source of truth**.
+## When to Use & Triggers
 
-Refer to [`docs/cloud-edge/architecture.md`](../../docs/cloud-edge/architecture.md) for full architectural guidelines and API payload schemas.
+Activate this skill when user requirements involve:
+- Connecting to a self-hosted backend (Node.js / Python / Go) or cloud BFF gateway;
+- Real-time PTT voice streaming, streaming TTS playback, or network audio;
+- Receiving LLM structured payloads to render interactive cards (flashcards, character cards, HUD telemetry, smart badges);
+- Infinite text pagination, 1-bit/2-bit streaming bitmap animations, or passive NFC cloud relay workflows.
+
+The device functions as a **thin client / physical avatar** (sensors, display viewport, buttons, audio I/O), while the external server handles **heavy compute, LLM orchestration, and business state**. Refer to [`docs/cloud-edge/architecture.md`](../../docs/cloud-edge/architecture.md) for full architectural guidelines and API payload schemas.
 
 ## Invariant Hardware & Resource Rules (ESP32-C3)
 
@@ -19,14 +24,16 @@ Refer to [`docs/cloud-edge/architecture.md`](../../docs/cloud-edge/architecture.
    - Maximum network receive buffer is 4 KB.
    - Never load full JSON payloads, long texts, or uncompressed images into heap memory.
 
-2. **Zero-Flash Audio Streaming**:
-   - Audio input (PTT 16kHz 16-bit PCM, ~32 KB/s): stream directly from the I2S microphone to WebSocket using a 2 KB ping-pong double buffer.
-   - Audio output (MP3/PCM stream): stream directly from network to the I2S audio codec via a circular buffer.
+2. **Zero-Flash Audio Streaming & Physical Button Mapping**:
+   - **Hardware Button Mapping**: The board features only three physical buttons (`UP`, `DOWN`, `OK`) sharing a single resistor ladder on GPIO0 (ADC1_CH0), with no separate voice side button. PTT voice streaming is typically mapped to **holding the `OK` button** (press triggers `ptt_start`, release triggers `ptt_end`), while `UP`/`DOWN` buttons are mapped to viewport scrolling and navigation.
+   - **Audio input (PTT 16kHz 16-bit PCM, ~32 KB/s)**: stream directly from the I2S microphone to WebSocket using a 2 KB ping-pong double buffer.
+   - **Audio output (MP3/PCM stream)**: stream directly from network to a circular buffer, feed to a lightweight software decoder (such as Helix-MP3), and send decoded PCM to I2S DMA.
    - **CRITICAL**: Never write streaming audio chunks to NOR Flash (SPI bus lock stalls I2S audio and burns flash endurance).
 
-3. **Virtual Viewport for Large Texts**:
+3. **Virtual Viewport for Large Texts (Mandatory WebSocket Pagination)**:
    - For articles, books, or lengthy LLM outputs, never buffer the full text on device.
    - The device requests and holds only the **active viewport window** (current screen + 1 screen buffer, < 1 KB RAM).
+   - **Paging Interaction**: When pressing `UP`/`DOWN` to flip pages, the client sends a `{"type":"page_req", ...}` text frame over the active WebSocket connection. **Using REST requests for paging is prohibited**, preventing repeated TLS handshakes and paging latency.
    - Use server-side line-wrapping and pagination indexes (`page_idx`, `total_pages`).
 
 4. **Retro Palette & Animation Engine**:

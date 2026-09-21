@@ -1,16 +1,21 @@
 ---
 name: passport-cloud-edge
-description: 针对 FoloToy AI Passport 设计并实现端云协同应用，将 ESP32-C3 瘦客户端与后端服务器/BFF 通过 WebSocket 与 REST API 协同，严格遵守硬件内存、音频流式传输与屏幕渲染限制。
+description: 针对 FoloToy AI Passport 设计并实现端云协同与瘦客户端应用。覆盖自建服务端/BFF、WebSocket 双向流式通信、实时语音对讲、AI 交互卡片、教育学习机、大模型对话及低代码联动，严格遵守片上内存（无 PSRAM）与音频流式传输硬件红线。
 ---
 
 <p align="right"><a href="SKILL.md">English</a> · <strong>简体中文</strong></p>
 
 # 端云协同开发技能 (Cloud-Edge Collaborative Development)
 
-当在 FoloToy AI Passport 上设计或开发涉及网络连接、私有服务端、云端 AI 协同或富媒体流式传输的应用时，使用本技能。
-设备定位为**物理终端与交互视口**（传感器、屏幕视口、按键、双向音频），而用户的私有服务器或个人电脑作为**云端超级大脑与真值源**。
+## 触发时机与适用场景
 
-完整架构手册与 API 传输协议规范请参阅 [`docs/cloud-edge/architecture.zh_CN.md`](../../docs/cloud-edge/architecture.zh_CN.md)。
+当需求涉及以下场景时触发本技能：
+- 连接自建私有服务器、Node.js/Python 后端或云端 BFF 网关；
+- 实时 PTT 语音录入直传、流式 TTS 播放或网络音频流式交互；
+- 接收大模型（LLM）结构化数据渲染智能卡片（单词卡、汉字卡、看板 HUD、智能工牌）；
+- 虚拟视口长文本分页、1-bit/2-bit 压缩点阵动画推流或被动 NFC 云端中继联动。
+
+设备定位为**物理终端与交互视口**（传感器、屏幕视口、按键、双向音频），外部服务端负责**复杂计算、大模型调用与业务状态存储**。完整通信规范请参阅 [`docs/cloud-edge/architecture.zh_CN.md`](../../docs/cloud-edge/architecture.zh_CN.md)。
 
 ## 硬件与资源不可逾越红线 (ESP32-C3)
 
@@ -19,14 +24,16 @@ description: 针对 FoloToy AI Passport 设计并实现端云协同应用，将 
    - 单个网络接收缓冲区最大设为 4 KB。
    - 严禁将完整 JSON、长文本或未经压缩的原始图像全量载入堆内存。
 
-2. **零 Flash 音频直通流**：
-   - 音频录入（PTT 16kHz 16-bit PCM，约 32 KB/s）：必须通过 2 KB 双缓冲从 I2S 麦克风直接泵送至 WebSocket 发送队列。
-   - 音频播放（流式 MP3/PCM）：从网络接收后直接送入环形缓冲区喂给 I2S 解码任务。
+2. **零 Flash 音频直通流与按键映射**：
+   - **硬件按键映射**：板载仅有 `UP`、`DOWN`、`OK` 三个物理按键（共用 GPIO0 ADC 电阻分压梯，无独立语音侧键）。PTT 语音直传通常映射为**按住 `OK` 键**（按下触发 `ptt_start`，松开触发 `ptt_end`），`UP`/`DOWN` 键复用为视口滚动与菜单导航。
+   - **音频录入（PTT 16kHz 16-bit PCM，约 32 KB/s）**：必须通过 2 KB 双缓冲从 I2S 麦克风直接泵送至 WebSocket 发送队列。
+   - **音频播放（流式 MP3/PCM）**：从网络接收后写入环形缓冲区，喂给轻量软件解码器（如 Helix-MP3），解码为 PCM 后送入 I2S DMA 播放。
    - **绝对红线**：严禁将音频流分片写入板载 NOR Flash（SPI 总线竞争会导致音频破音卡死，且加速 Flash 寿命损耗）。
 
-3. **长文本虚拟视口滑动窗口**：
+3. **长文本虚拟视口滑动窗口（统一走 WebSocket 分页）**：
    - 对于电子书、长篇新闻或大模型长回复，设备端绝不缓存全文。
    - 设备仅向服务端按需请求**当前可视视口窗口**（当前屏 + 预加载一屏，RAM 占用恒定 < 1 KB）。
+   - **翻页交互**：按 `UP`/`DOWN` 翻页时，必须通过当前保持的 WebSocket 文本帧发送 `{"type":"page_req", ...}`，**严禁使用 REST 请求翻页**，彻底杜绝连续翻页引发的 TLS 重复握手与延迟。
    - 服务端负责根据屏幕点阵（240×320）计算折行、字数和分页索引（`page_idx`, `total_pages`）。
 
 4. **复古调色板单色/双色视频引擎**：
