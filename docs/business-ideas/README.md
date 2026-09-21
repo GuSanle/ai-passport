@@ -12,8 +12,8 @@ This directory catalogs business scenarios, product concepts, and real-world imp
 
 | Scenario ID | Title | Core Focus | Document Link |
 | :--- | :--- | :--- | :--- |
-| **IDEA-01** | **Smart Workplace Badge & Physical Assistant** | Low-code integration, personal task/todo management, active schedule notifications, seamless QR/NFC binding & re-binding, JWT session management. | [smart-workplace-badge.md](smart-workplace-badge.md) |
-| **IDEA-02** | **Interactive AI Children's Learning Companion** | AI educational flashcards, multilingual CJK typography, PTT voice dialog, server-side streaming bitmap fallback. | [children-ai-companion.md](children-ai-companion.md) |
+| **IDEA-01** | **Smart Workplace Badge & Physical Assistant** | Low-code integration, personal task/todo management, active schedule notifications, seamless QR/NFC binding & re-binding, JWT session management. | [smart-workplace-badge/README.md](smart-workplace-badge/README.md) |
+| **IDEA-02** | **Interactive AI Children's Learning Companion** | AI educational flashcards, multilingual CJK typography, PTT voice dialog, server-side streaming bitmap fallback. | [children-ai-companion/README.md](children-ai-companion/README.md) |
 
 ---
 

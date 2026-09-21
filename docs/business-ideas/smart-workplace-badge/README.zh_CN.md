@@ -1,5 +1,5 @@
 <p align="right">
-  <a href="smart-workplace-badge.md">English</a> · <strong>简体中文</strong>
+  <a href="README.md">English</a> · <strong>简体中文</strong>
 </p>
 
 # 智能工作工牌与随身任务助手 (IDEA-01)

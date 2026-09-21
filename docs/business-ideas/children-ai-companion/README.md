@@ -1,5 +1,5 @@
 <p align="right">
-  <a href="children-ai-companion.zh_CN.md">简体中文</a> · <strong>English</strong>
+  <a href="README.zh_CN.md">简体中文</a> · <strong>English</strong>
 </p>
 
 # Children's Interactive AI Learning Companion (IDEA-02)

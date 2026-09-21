@@ -12,8 +12,8 @@
 
 | 场景编号 | 场景标题 | 核心业务与技术结合点 | 详情文档 |
 | :--- | :--- | :--- | :--- |
-| **IDEA-01** | **企业智能工作工牌与随身任务助手** | 深度结合低代码平台、个人待办与日程主动物理强提醒、扫码/NFC 极简人机绑定与换绑、JWT 免密长连接长效会话。 | [smart-workplace-badge.zh_CN.md](smart-workplace-badge.zh_CN.md) |
-| **IDEA-02** | **儿童 AI 教育伴学卡片机** | 中英文识字闪卡、全量 CJK 字库与生僻字位图旁路、PTT 语音交互与打字机卡片流式下发。 | [children-ai-companion.zh_CN.md](children-ai-companion.zh_CN.md) |
+| **IDEA-01** | **企业智能工作工牌与随身任务助手** | 深度结合低代码平台、个人待办与日程主动物理强提醒、扫码/NFC 极简人机绑定与换绑、JWT 免密长连接长效会话。 | [smart-workplace-badge/README.zh_CN.md](smart-workplace-badge/README.zh_CN.md) |
+| **IDEA-02** | **儿童 AI 教育伴学卡片机** | 中英文识字闪卡、全量 CJK 字库与生僻字位图旁路、PTT 语音交互与打字机卡片流式下发。 | [children-ai-companion/README.zh_CN.md](children-ai-companion/README.zh_CN.md) |
 
 ---
 

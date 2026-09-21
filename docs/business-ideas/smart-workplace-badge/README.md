@@ -1,5 +1,5 @@
 <p align="right">
-  <a href="smart-workplace-badge.zh_CN.md">简体中文</a> · <strong>English</strong>
+  <a href="README.zh_CN.md">简体中文</a> · <strong>English</strong>
 </p>
 
 # Smart Workplace Badge & Personal Task Assistant (IDEA-01)
