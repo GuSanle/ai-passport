@@ -27,6 +27,7 @@
 | 技能 | 功能 |
 | --- | --- |
 | [passport-develop](passport-develop/SKILL.zh_CN.md) | 将需求落实为应用、测试及已验证交付，按需协调其余核心技能。 |
+| [passport-cloud-edge](passport-cloud-edge/SKILL.zh_CN.md) | 设计并实现端云协同瘦客户端应用，遵循 WebSocket 流式音频、长文虚拟视口与复古调色板动画传输标准。 |
 | [passport-setup](passport-setup/SKILL.zh_CN.md) | 检查并准备 ESP-IDF 5.5.3 环境，不覆盖其他安装，不假定能够访问 USB。 |
 | [passport-build](passport-build/SKILL.zh_CN.md) | 运行统一门禁，保留已校验的合并固件和匹配的 ELF/MAP。 |
 | [passport-device-test](passport-device-test/SKILL.zh_CN.md) | 获得授权后识别目标、刷写指定固件，区分串口日志与实机验收。 |
