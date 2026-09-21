@@ -1,6 +1,6 @@
 ---
 name: passport-cloud-edge
-description: Design and implement cloud-edge collaborative and thin-client applications for FoloToy AI Passport. Covers self-hosted server/BFF, WebSocket bidirectional streaming, real-time voice intercom, AI flashcards, LLM dialogs, and low-code integrations while strictly respecting ESP32-C3 memory (no PSRAM) and audio streaming hardware constraints.
+description: Design and implement cloud-edge collaborative and thin-client applications for FoloToy AI Passport. Covers self-hosted server/BFF, WebSocket bidirectional streaming, real-time voice intercom, AI flashcards, LLM dialogs, low-code integrations, and streaming bitmaps while strictly respecting ESP32-C3 memory (no PSRAM) and audio streaming hardware constraints.
 ---
 
 <p align="right"><a href="SKILL.zh_CN.md">简体中文</a> · <strong>English</strong></p>
@@ -54,8 +54,9 @@ The device functions as a **thin client / physical avatar** (sensors, display vi
    - **Connection Lifecycle & Power-Saving Standards**:
      - Keep the WSS connection multiplexed during active conversations.
      - If idle for a configured timeout (recommended 30–60 seconds), the client should gracefully close the WSS connection and put the Wi-Fi modem into Modem-Sleep / Light-Sleep to conserve battery. The next button press instantly reconnects (leveraging TLS Session Resumption / tickets for sub-second handshake).
-   - **Bitmap Fallback for Educational Cards / Uncached Glyphs**:
-     - When encountering rare characters, stroke-order animations, or glyphs outside the embedded font subset, the server streams a 1-bit monochrome bitmap slice (e.g. 64×64 bitmap is only 512 bytes) directly over WebSocket, cleanly bypassing MCU flash font limitations.
+   - **Embedded Multilingual Font Asset & Bitmap Fallback**:
+     - For on-device Chinese, Japanese, and English UI rendering, activate the dedicated [`passport-cjk-font`](../passport-cjk-font/SKILL.md) skill to integrate the pre-compiled 837 KB CJK binary font (`noto_cjk_16_compact_4bpp.bin`, mapped via `esp_partition_mmap` with zero SRAM heap cost).
+     - When encountering ultra-rare characters, stroke-order animations, or glyphs outside the embedded font, the server streams a 1-bit monochrome bitmap slice (e.g. 64×64 bitmap is only 512 bytes) directly over WebSocket, cleanly bypassing MCU flash font limitations.
 
 ## Dual Protocol Strategy
 

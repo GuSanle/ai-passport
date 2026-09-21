@@ -54,7 +54,7 @@ To guarantee zero heap fragmentation and zero Out-of-Memory (OOM) crashes on the
   │    • Frame Buffers: 9.6 KB (LVGL single 20-row DMA buffer)                  │
   ├─────────────────────────────────────────────────────────────────────────────┤
   │ 2. Device Flash (8 MB NOR Flash) ──► Local Arsenal & Offline Cache          │
-  │    • Embedded fonts (Montserrat + compact Chinese glyph tables)             │
+  │    • Embedded fonts (Montserrat + 837 KB CJK binary font partition in Flash)│
   │    • Fixed audio assets (click, error buzzer, chime, power tone)            │
   │    • Offline reading cache (appends long-text dialogs via LittleFS)         │
   │    • Palette Look-Up Tables (LUT presets for Pip-Boy, Amber, Matrix)        │

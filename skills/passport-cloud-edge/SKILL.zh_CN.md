@@ -1,11 +1,11 @@
 ---
 name: passport-cloud-edge
-description: 针对 FoloToy AI Passport 设计并实现端云协同与瘦客户端应用。覆盖自建服务端/BFF、WebSocket 双向流式通信、实时语音对讲、AI 交互卡片、教育学习机、大模型对话及低代码联动，严格遵守片上内存（无 PSRAM）与音频流式传输硬件红线。
+description: 针对 FoloToy AI Passport 设计与实现云端协同/瘦客户端应用。涵盖自建服务端/BFF、WebSocket 双向全双工流式传输、实时语音对讲、AI 知识闪卡、大模型交互卡片、低代码平台接入与流式点阵动画，严格遵循 ESP32-C3 资源（无 PSRAM）与音频流式传输硬件红线。
 ---
 
 <p align="right"><a href="SKILL.md">English</a> · <strong>简体中文</strong></p>
 
-# 端云协同开发技能 (Cloud-Edge Collaborative Development)
+# 云端协同架构开发技能 (Cloud-Edge Collaborative Development)
 
 ## 触发时机与适用场景
 
@@ -54,8 +54,9 @@ description: 针对 FoloToy AI Passport 设计并实现端云协同与瘦客户�
    - **连接生命周期与省电规范**：
      - 会话活跃期复用 WSS 连接，由事件或心跳保活。
      - 若连续无交互超时（推荐 30~60 秒），客户端主动关闭 WSS 连接并让 Wi-Fi 芯片进入 Modem-Sleep 省电；用户按下按键瞬间唤醒重连（支持 TLS 会话复用以实现亚秒级重连）。
-   - **教育卡片生字与笔顺位图旁路**：
-     - 当遇到生僻字、笔顺分解动画或本地字库未收录汉字时，服务端通过 WSS 文本或二进制帧直接下发 1-bit 单色位图/点阵（如 64×64 位图仅 512 字节），彻底绕开单片机 Flash 字库容量限制。
+   - **内嵌多语言字库与生字位图旁路**：
+     - 设备端如需显示中、日、英 UI 文本，直接调用独立的 [`passport-cjk-font`](../passport-cjk-font/SKILL.zh_CN.md) 技能集成预编译的 837 KB CJK 二进制字库（`noto_cjk_16_compact_4bpp.bin`，通过 `esp_partition_mmap` 零内存开销映射）。
+     - 当遇到极端罕见冷僻字、笔顺分解动画或本地字库未收录符号时，服务端通过 WSS 文本或二进制帧直接下发 1-bit 单色位图/点阵（如 64×64 位图仅 512 字节），彻底绕开单片机 Flash 字库容量限制。
 
 ## 双通道通信架构
 
