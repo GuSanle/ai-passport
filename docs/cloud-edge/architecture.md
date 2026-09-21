@@ -70,19 +70,40 @@ To guarantee zero heap fragmentation and zero Out-of-Memory (OOM) crashes on the
 
 ---
 
-## 3. The Unified Full-Duplex WebSocket Protocol
+## 3. Mandatory Full-Duplex WebSocket Invariant (vs. The REST Fallacy)
 
-Opening separate HTTPS connections for recording upload, text polling, and audio download consumes **~35 KB of RAM per TLS handshake**—two concurrent TLS connections will exhaust the heap.
+In embedded IoT architectures, an intuitive assumption is often: *"Wouldn't stateless REST APIs be more memory-efficient since connections can be closed immediately after each turn?"* **On the ESP32-C3 (no PSRAM, ~100 KB free heap), using REST for interactive voice and AI streaming is disastrous for both stability and latency**:
 
-**The Solution**: Establish **a single persistent WSS (TLS WebSocket) connection** and multiplex all traffic:
+### 3.1 Why REST APIs Fail for Interactive Voice AI
+1. **Audio Cannot Be Buffered in RAM (No-PSRAM Constraint)**:
+   - A 16kHz 16-bit mono PCM recording produces 32 KB/s; a brief 5-second query amounts to **160 KB**.
+   - The ESP32-C3 only has ~100 KB of usable heap. It is physically impossible to hold the full recording in RAM to perform a standard HTTP POST request.
+   - NOR Flash cannot be used as an audio buffer (erasing 4KB sectors stalls the SPI bus for tens of milliseconds, causing audio distortion and burning flash endurance). Live voice must stream directly: `I2S DMA (2 KB ping-pong buffer) ──► TCP Socket`.
+2. **TLS Handshake RAM Spikes and Heap Fragmentation**:
+   - Each HTTPS REST handshake dynamically requires **30 to 35 KB of contiguous heap** for asymmetric key exchange and certificate parsing.
+   - Constantly opening and closing HTTPS connections in a ~100 KB heap causes rapid fragmentation and unpredictable `out of memory` aborts.
+   - **WebSocket handshakes only once** upon connection; in the steady streaming state, it consumes only **~12 to 16 KB** of steady RAM.
+3. **Half-Duplex Queuing & Inability to Barge-In**:
+   - REST is strictly request-response. It cannot deliver real-time UI card state changes concurrently while streaming TTS audio, nor can it handle mid-utterance user interruptions (barge-in).
+
+### 3.2 The Standard: Multiplexed Full-Duplex WSS Connection
+
+All hot-path traffic is multiplexed through a single persistent WSS (TLS WebSocket) connection:
 
 ```text
-  Client ───────[ Binary Frame: 0x01 + 1024B PCM Chunk ]────────► Server (Audio Stream)
-  Client ───────[ Text Frame: {"action":"press","btn":"ok"} ]───► Server (Input Event)
-  Server ◄──────[ Text Frame: {"delta":"Hello, world"} ]──────── Client (Live LLM Token)
-  Server ◄──────[ Binary Frame: 0x02 + MP3 Audio Slice ]──────── Client (TTS Playback)
-  Server ◄──────[ Text Frame: {"cmd":"set_card", ...} ]───────── Client (State Sync)
+  Client ───────[ Binary Frame: 0x01 + 1024B PCM Chunk ]────────► Server (Live Voice Stream, 2KB ping-pong)
+  Client ───────[ Text Frame: {"action":"press","btn":"ok"} ]───► Server (Button / Interruption / Paging)
+  Server ◄──────[ Text Frame: {"type":"card_word", ...} ]─────── Client (Structured Card Layout JSON)
+  Server ◄──────[ Text Frame: {"delta":"Hello, world"} ]──────── Client (Live LLM Typewriter Tokens)
+  Server ◄──────[ Binary Frame: 0x02 + MP3 Audio Slice ]──────── Client (TTS Streaming Playback)
+  Server ◄──────[ Binary Frame: 0x03 + 1-bit Bitmap Slice ]───── Client (Rare Glyphs / Stroke Order / Retro Art)
 ```
+
+### 3.3 Connection Lifecycle & Low-Power Sleep Strategy
+Maintaining a persistent connection does not require leaving Wi-Fi TX/RX on indefinitely:
+* **Active Session**: Keep the WSS connection open with lightweight keep-alive pings (every 30s) or event-driven traffic, achieving 0ms connection latency for back-and-forth turns.
+* **Idle Timeout Disconnect**: If no user interaction occurs for **30 to 60 seconds**, the client gracefully closes the WSS connection and transitions the Wi-Fi modem into **Modem-Sleep or Light-Sleep** (< 5 mA), dramatically extending battery life.
+* **Instant Reconnection**: When the user presses a button, Wi-Fi wakes up instantly, resuming the WSS connection within 100–200ms via TLS Session Resumption (Session Tickets).
 
 ---
 
@@ -154,7 +175,10 @@ sequenceDiagram
 
 Regardless of the server language or framework used, communication with the ESP32-C3 client must strictly adhere to the following lightweight, low-memory transmission contracts.
 
-### 7.1 Core REST API Contract (Stateless Telemetry & Actions)
+### 7.1 Auxiliary REST API Contract (Strictly for Cold-Path Operations)
+
+> [!WARNING]
+> **Boundary Warning**: REST APIs are strictly permitted for one-time initialization, Wi-Fi provisioning checks, or low-frequency telemetry. **PROHIBITED** for voice streaming, real-time query turns, live LLM token streaming, or card state synchronization.
 
 #### 1. HUD Telemetry Endpoint (BFF Data Slimming)
 * **Request**: `GET /api/v1/hud?badge_id={id}`
@@ -170,9 +194,9 @@ Regardless of the server language or framework used, communication with the ESP3
   }
   ```
 
-#### 2. Virtual Viewport Pagination Endpoint (Infinite Text Slicing)
+#### 2. Virtual Viewport Pagination Endpoint (Cold Fallback Channel)
 * **Request**: `GET /api/v1/text/page?badge_id={id}&doc_id={id}&offset={n}&limit=200`
-* **Constraint**: The 240×320 screen holds ~150–200 characters per viewport; fetch only one viewport at a time.
+* **Constraint**: The 240×320 screen holds ~150–200 characters per viewport; fetch only one viewport at a time (recommend preferring `{"req":"page"}` inside WebSocket text frames).
 * **Payload Schema**:
   ```json
   {
@@ -191,7 +215,7 @@ Regardless of the server language or framework used, communication with the ESP3
 
 ---
 
-### 7.2 WebSocket Full-Duplex Multiplexing Contract (`/ws/badge/{badge_id}`)
+### 7.2 Core WebSocket Full-Duplex Multiplexing Contract (`/ws/badge/{badge_id}`)
 
 All high-frequency, bidirectional streaming traffic is multiplexed over this single WSS connection, separated by frame types:
 
@@ -205,8 +229,9 @@ All high-frequency, bidirectional streaming traffic is multiplexed over this sin
 | Frame Type | Content & Format | Client Processing Action |
 | :--- | :--- | :--- |
 | **Text Frame (Text Stream)** | Live typewriter token delta:<br>`{"type":"delta","text":"char"}` | Appends to the screen's LVGL label buffer. Constant memory. |
-| **Binary Frame (Audio Stream)** | MP3 audio stream slices (optional `0x02` header) | Written into the 16KB ring buffer; pre-buffers 4KB before I2S start. |
-| **Binary Frame (Animation Stream)** | 1-bit / 2-bit RLE bitmap frame (`0x03` header) | Decoded via Palette Look-Up Table (LUT) directly to SPI DMA at 25–30 fps. |
+| **Text Frame (Card Model)** | Structured educational flashcard:<br>`{"type":"card_word", "word":"apple", ...}`<br>`{"type":"card_char", "char":"\\u821E", "pinyin":"wu", ...}` | Parses and renders to LVGL card widget layout for instant learning feedback. |
+| **Binary Frame (Audio Stream)** | MP3 audio stream slices (`0x02` header) | Written into the 16KB ring buffer; pre-buffers 4KB before I2S start. |
+| **Binary Frame (Glyph/Bitmap Stream)** | 1-bit / 2-bit RLE bitmap frame (`0x03` header) | Renders uncached Chinese characters, stroke orders, or retro animation directly to SPI display RAM. |
 | **Text Frame (Control Command)** | Force alert / screen override:<br>`{"type":"alert","level":"critical","msg":"text"}` | Triggers audio beep and displays emergency red HUD. |
 
 ---
@@ -217,5 +242,5 @@ All high-frequency, bidirectional streaming traffic is multiplexed over this sin
 | :--- | :--- | :--- | :--- | :--- |
 | **Mic Voice Upstream** | WSS Binary Frame | 16 kHz 16-bit Mono PCM | 1024 bytes / packet (32ms) | Constant 2KB RAM double-buffer; server VAD |
 | **Speaker Audio Downstream** | WSS Binary Frame | 32–64kbps CBR/VBR MP3 | Slices (512–2048 bytes) | 16KB ring buffer with 4KB jitter buffer |
-| **Typewriter Text Downstream** | WSS Text Frame | UTF-8 JSON token delta | Few bytes to tens of bytes | Time-To-First-Token (TTFT) < 300ms |
-| **Retro Animation Downstream** | WSS Binary Frame | 240×320 1-bit RLE | 2–3 KB / frame | 25–30 fps smooth video with near-zero CPU |
+| **Typewriter / Card Downstream**| WSS Text Frame | UTF-8 JSON delta / card model | Tens of bytes to hundreds of bytes | Time-To-First-Token (TTFT) < 300ms |
+| **Bitmap / Animation Downstream**| WSS Binary Frame | 1-bit / 2-bit RLE bitmap | 512 bytes ~ 3 KB / frame | Instant rare glyph render; 25–30 fps smooth video |

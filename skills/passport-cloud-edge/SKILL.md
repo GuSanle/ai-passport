@@ -38,16 +38,29 @@ Refer to [`docs/cloud-edge/architecture.md`](../../docs/cloud-edge/architecture.
    - The on-board NTAG213 tag is passive and fixed.
    - Never treat the NFC tag as dynamic memory; use its UID / static URL as an immutable pointer that maps to dynamic user metadata on the cloud server.
 
+6. **Mandatory WebSocket Invariant for Interactive AI**:
+   - **Interactive AI conversations, voice PTT streaming, card state updates, and audio/video streaming MUST strictly use a single full-duplex WebSocket (WSS) connection**.
+   - **REST APIs are strictly prohibited for voice capture or interactive AI turn loops**. Root causes:
+     1. **No PSRAM; RAM cannot buffer audio**: A 5-second PCM audio recording is 160 KB, while the ESP32-C3 has only ~100 KB free heap. It is physically impossible to buffer full audio in memory for a REST POST; audio must stream over WSS as it is captured (2 KB ping-pong DMA buffer).
+     2. **TLS Handshake RAM Spike**: Each HTTPS handshake dynamically consumes 30–35 KB heap, triggering severe heap fragmentation and Out-of-Memory (OOM) aborts. In contrast, WebSocket handshakes once at boot/wakeup and maintains a steady ~12–16 KB context.
+     3. **Full-Duplex Streaming & Barge-In**: REST half-duplex cannot concurrently push UI card states alongside audio streams, nor can it handle mid-speech user interruption (barge-in).
+   - **Connection Lifecycle & Power-Saving Standards**:
+     - Keep the WSS connection multiplexed during active conversations.
+     - If idle for a configured timeout (recommended 30–60 seconds), the client should gracefully close the WSS connection and put the Wi-Fi modem into Modem-Sleep / Light-Sleep to conserve battery. The next button press instantly reconnects (leveraging TLS Session Resumption / tickets for sub-second handshake).
+   - **Bitmap Fallback for Educational Cards / Uncached Glyphs**:
+     - When encountering rare characters, stroke-order animations, or glyphs outside the embedded font subset, the server streams a 1-bit monochrome bitmap slice (e.g. 64×64 bitmap is only 512 bytes) directly over WebSocket, cleanly bypassing MCU flash font limitations.
+
 ## Dual Protocol Strategy
 
-- **REST API (HTTP/HTTPS)**:
-  - Used strictly for **cold-path operations**: device registration, Wi-Fi provisioning, profile synchronization, static asset discovery.
-  - JSON responses must be concise (< 512 bytes).
-- **WebSocket (WSS)**:
-  - Used for **hot-path duplex operations**: real-time push-to-talk voice streaming, LLM token streaming, sensor telemetry, and RPC controls.
+- **REST API (HTTP/HTTPS) — Strictly for Cold-Path Operations**:
+  - Used strictly for one-time or low-frequency stateless configurations: initial device registration, Wi-Fi credential provisioning, firmware manifest checks, static asset inventory.
+  - JSON responses must remain concise (< 512 bytes).
+  - **PROHIBITED** for voice streaming, interactive query loops, live token deltas, or card state updates.
+- **WebSocket (WSS) — The Mandatory Standard for Interactive & Streaming AI**:
+  - Multiplexes all hot-path traffic: real-time PTT voice streaming, live typewriter token streaming, card structured JSON payloads, TTS audio playback streaming, retro bitmap frames, and button telemetry.
   - Frame multiplexing:
-    - Text frame: Structured JSON commands (`type: "cmd"`, `"stream_start"`, `"status"`, etc.).
-    - Binary frame: Prefixed audio chunks (`[0x01][Audio Payload]`) or image slices (`[0x02][Bitmap Payload]`).
+    - Text frame: Structured JSON commands and card models (`type: "cmd"`, `"card_word"`, `"card_char"`, `"page"`).
+    - Binary frame: Prefixed data streams (`[0x01]` raw audio stream, `[0x02]` bitmap/glyph slice).
 
 ## AI Workflow for Cloud-Edge Apps
 
