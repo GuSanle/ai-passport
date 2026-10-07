@@ -4,12 +4,17 @@
 #include "eevee_badge_ui.h"
 #include "eevee_font.h"
 #include "eevee_prov.h"
+#include "bsp_audio.h"
 #include "bsp_battery.h"
 #include "bsp_display.h"
 
+#include "driver/gpio.h"
 #include "esp_event.h"
+#include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_sleep.h"
+#include "esp_sntp.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
@@ -17,6 +22,8 @@
 #include "freertos/task.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
 static const char *TAG = "eevee_app";
 
@@ -43,7 +50,13 @@ static eevee_task_t s_curr_task;
 static eevee_record_t s_curr_record;
 
 static volatile bool s_wifi_connected = false;
+static volatile bool s_wifi_started = false;
 static volatile bool s_screen_on = true;
+static volatile bool s_is_sleeping = false;
+static volatile bool s_just_woke_up = false;
+static bool s_sntp_initialized = false;
+static volatile bool s_time_synced = false;
+
 static uint32_t s_idle_seconds = 0;
 static int s_wifi_retry_count = 0;
 static int s_curr_task_offset = 0;
@@ -53,6 +66,139 @@ static TaskHandle_t s_console_handle = NULL;
 
 static void eevee_app_enter_prov_mode(void);
 static void eevee_app_exit_prov_mode(void);
+static void eevee_app_enter_sleep(void);
+static void eevee_app_wake_up(void);
+static void eevee_time_init(void);
+static bool eevee_time_get_str(char *buf, size_t max_len);
+static bool eevee_time_get_date_str(char *buf, size_t max_len);
+
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    (void)tv;
+    s_time_synced = true;
+    ESP_LOGI(TAG, "SNTP network time synchronized successfully!");
+}
+
+static void eevee_time_init(void)
+{
+    if (s_sntp_initialized) {
+        esp_sntp_restart();
+        return;
+    }
+    ESP_LOGI(TAG, "Initializing SNTP client (CST-8)...");
+    setenv("TZ", "CST-8", 1);
+    tzset();
+
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "ntp.aliyun.com");
+    esp_sntp_setservername(1, "pool.ntp.org");
+    esp_sntp_setservername(2, "time.asia.apple.com");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    esp_sntp_init();
+    s_sntp_initialized = true;
+}
+
+static bool eevee_time_get_str(char *buf, size_t max_len)
+{
+    if (!buf || max_len == 0) return false;
+    time_t now;
+    time(&now);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    if (timeinfo.tm_year < (2025 - 1900)) {
+        snprintf(buf, max_len, "--:--");
+        return false;
+    }
+    strftime(buf, max_len, "%H:%M", &timeinfo);
+    return true;
+}
+
+static bool eevee_time_get_date_str(char *buf, size_t max_len)
+{
+    if (!buf || max_len == 0) return false;
+    time_t now;
+    time(&now);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    if (timeinfo.tm_year < (2025 - 1900)) {
+        snprintf(buf, max_len, "待对时");
+        return false;
+    }
+    strftime(buf, max_len, "%Y-%m-%d", &timeinfo);
+    return true;
+}
+
+static void eevee_app_enter_sleep(void)
+{
+    if (!s_screen_on) return;
+    s_screen_on = false;
+    s_is_sleeping = true;
+    ESP_LOGI(TAG, "Screen OFF -> Entering Stage 1+2 Low-power sleep...");
+
+    // 1. 关闭屏幕背光
+    bsp_display_backlight(0);
+
+    // 2. 让 ST7789 驱动芯片进入 Sleep In (降低显示驱动功耗)
+    if (bsp_lvgl_lock(250)) {
+        esp_lcd_panel_handle_t panel = bsp_display_panel();
+        if (panel) {
+            esp_lcd_panel_disp_on_off(panel, false);
+            esp_lcd_panel_disp_sleep(panel, true);
+        }
+        bsp_lvgl_unlock();
+    }
+
+    // 3. 挂起音频芯片 ES8311 (切断偏置与内部时钟)
+    bsp_audio_sleep();
+
+    // 4. 挂起 Wi-Fi 射频天线 (切断天线功耗，Flash 中凭据保留)
+    if (s_wifi_started) {
+        s_wifi_connected = false;
+        esp_wifi_disconnect();
+        esp_wifi_stop();
+        s_wifi_started = false;
+        ESP_LOGI(TAG, "Wi-Fi radio stopped for low power.");
+    }
+}
+
+static void eevee_app_wake_up(void)
+{
+    if (s_screen_on) return;
+    s_screen_on = true;
+    s_is_sleeping = false;
+    s_just_woke_up = true;
+    s_idle_seconds = 0;
+    ESP_LOGI(TAG, "Waking up from sleep mode (Screen ON)...");
+
+    // 1. 唤醒 ST7789 芯片并恢复背光
+    if (bsp_lvgl_lock(250)) {
+        esp_lcd_panel_handle_t panel = bsp_display_panel();
+        if (panel) {
+            esp_lcd_panel_disp_sleep(panel, false);
+            esp_lcd_panel_disp_on_off(panel, true);
+        }
+        // 立即刷新一次当前时间与电量
+        char time_str[16];
+        char date_str[32];
+        eevee_time_get_str(time_str, sizeof(time_str));
+        eevee_time_get_date_str(date_str, sizeof(date_str));
+        eevee_badge_ui_update_time(time_str, date_str);
+        eevee_badge_ui_update_status(false, bsp_battery_soc());
+        bsp_lvgl_unlock();
+    }
+    bsp_display_backlight(100);
+
+    // 2. 恢复音频芯片
+    bsp_audio_wake();
+
+    // 3. 重新拉起 Wi-Fi (后台静默自动连接，无感恢复)
+    if (eevee_config_has_wifi(&s_cfg)) {
+        ESP_LOGI(TAG, "Restarting Wi-Fi in background...");
+        s_wifi_started = true;
+        s_wifi_retry_count = 0;
+        esp_wifi_start();
+    }
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
@@ -60,6 +206,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     (void)arg;
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_STA_START) {
+            s_wifi_started = true;
             if (eevee_config_has_wifi(&s_cfg)) {
                 ESP_LOGI(TAG, "Wi-Fi started, connecting to '%s'...", s_cfg.wifi_ssid);
                 s_wifi_retry_count = 0;
@@ -74,6 +221,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 eevee_badge_ui_update_status(false, bsp_battery_soc());
                 eevee_badge_ui_update_settings(s_cfg.wifi_ssid, false, s_cfg.base_url, s_cfg.pat_token[0] != '\0');
                 bsp_lvgl_unlock();
+            }
+            if (s_is_sleeping) {
+                // 休眠期间主动断网，不触发自动重连重试
+                return;
             }
             if (eevee_config_has_wifi(&s_cfg) && s_wifi_retry_count < WIFI_MAX_RETRIES) {
                 s_wifi_retry_count++;
@@ -90,7 +241,16 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Wi-Fi Connected! IP: " IPSTR, IP2STR(&evt->ip_info.ip));
         s_wifi_connected = true;
         s_wifi_retry_count = 0;
+
+        // 初始化或触发 SNTP 网络对时
+        eevee_time_init();
+
         if (bsp_lvgl_lock(250)) {
+            char time_str[16];
+            char date_str[32];
+            eevee_time_get_str(time_str, sizeof(time_str));
+            eevee_time_get_date_str(date_str, sizeof(date_str));
+            eevee_badge_ui_update_time(time_str, date_str);
             eevee_badge_ui_update_status(true, bsp_battery_soc());
             eevee_badge_ui_update_settings(s_cfg.wifi_ssid, true, s_cfg.base_url, s_cfg.pat_token[0] != '\0');
             eevee_badge_ui_show_toast("网络已连接", 0x10B981);
@@ -123,6 +283,7 @@ static void wifi_init_sta(void)
 
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg);
+    s_wifi_started = true;
     esp_wifi_start();
 }
 
@@ -187,6 +348,38 @@ static void eevee_worker_task(void *pvParam)
     int tick_count = 0;
 
     for (;;) {
+        // 如果处于息屏休眠状态，执行 Stage 2 自动 Light-Sleep
+        if (!s_screen_on) {
+            // 1. 配置 GPIO0 低电平作为硬件唤醒源 (任意物理按键按下即拉低到 <0.6V)
+            gpio_config_t io_conf = {
+                .pin_bit_mask = (1ULL << GPIO_NUM_0),
+                .mode = GPIO_MODE_INPUT,
+                .pull_up_en = GPIO_PULLUP_DISABLE, // 外部硬件已有 10k 上拉电阻
+                .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                .intr_type = GPIO_INTR_LOW_LEVEL,
+            };
+            gpio_config(&io_conf);
+            gpio_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+            esp_sleep_enable_gpio_wakeup();
+
+            // 2. 配置 15 秒定时器周期唤醒 (推进系统时钟并维持心跳)
+            esp_sleep_enable_timer_wakeup(15ULL * 1000 * 1000);
+
+            // 3. 进入 Light Sleep (CPU 暂停，SRAM 保持，整机功耗降至 ~1.5mA)
+            esp_light_sleep_start();
+
+            // 4. 醒来后立即禁用唤醒源
+            esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+            gpio_wakeup_disable(GPIO_NUM_0);
+
+            esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+            if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+                ESP_LOGI(TAG, "Light sleep wake by GPIO0 (button press)!");
+                eevee_app_wake_up();
+            }
+            continue;
+        }
+
         eevee_cmd_t cmd;
         if (xQueueReceive(s_cmd_queue, &cmd, pdMS_TO_TICKS(1000)) == pdPASS) {
             switch (cmd.type) {
@@ -290,16 +483,20 @@ static void eevee_worker_task(void *pvParam)
         if (s_screen_on && !eevee_badge_ui_is_prov_view_visible()) {
             s_idle_seconds++;
             if (s_idle_seconds >= SCREEN_OFF_TIMEOUT_SEC) {
-                s_screen_on = false;
-                bsp_display_backlight(0);
-                ESP_LOGI(TAG, "Screen OFF (idle %d s). Backlight off and periodic polling stopped.",
-                         SCREEN_OFF_TIMEOUT_SEC);
+                eevee_app_enter_sleep();
+                continue;
             }
         }
 
-        // 仅在亮屏状态下更新电量状态栏与周期轮询待办流程
+        // 仅在亮屏状态下更新时间与电量状态栏，并周期轮询待办流程
         if (s_screen_on) {
+            char time_str[16];
+            char date_str[32];
+            eevee_time_get_str(time_str, sizeof(time_str));
+            eevee_time_get_date_str(date_str, sizeof(date_str));
+
             if (bsp_lvgl_lock(100)) {
+                eevee_badge_ui_update_time(time_str, date_str);
                 eevee_badge_ui_update_status(s_wifi_connected, bsp_battery_soc());
                 bsp_lvgl_unlock();
             }
@@ -408,16 +605,11 @@ static void eevee_console_task(void *pvParam)
                 printf("  Battery SOC:   %d%%\n", bsp_battery_soc());
                 printf("===================================\n");
             } else if (strcmp(line, "screen off") == 0) {
-                s_screen_on = false;
-                bsp_display_backlight(0);
-                printf("[CONSOLE] Screen turned OFF. Polling stopped.\n");
+                eevee_app_enter_sleep();
+                printf("[CONSOLE] Screen turned OFF and entered low-power sleep mode.\n");
             } else if (strcmp(line, "screen on") == 0) {
-                s_screen_on = true;
-                s_idle_seconds = 0;
-                bsp_display_backlight(100);
-                printf("[CONSOLE] Screen turned ON. Triggering poll...\n");
-                eevee_cmd_t cmd = { .type = CMD_POLL_STATUS };
-                xQueueSend(s_cmd_queue, &cmd, 0);
+                eevee_app_wake_up();
+                printf("[CONSOLE] Screen turned ON. Woke up from sleep.\n");
             } else if (strcmp(line, "help") == 0) {
                 printf("[CONSOLE] Available commands:\n");
                 printf("  wifi <ssid> <pass>   - Set Wi-Fi and connect\n");
@@ -492,6 +684,11 @@ void eevee_app_start(void)
         char user_card_url[256];
         snprintf(user_card_url, sizeof(user_card_url), "%s/settings/profile", web_url);
         eevee_badge_ui_update_qr_url(user_card_url);
+        char time_str[16];
+        char date_str[32];
+        eevee_time_get_str(time_str, sizeof(time_str));
+        eevee_time_get_date_str(date_str, sizeof(date_str));
+        eevee_badge_ui_update_time(time_str, date_str);
         eevee_badge_ui_update_status(false, bsp_battery_soc());
         eevee_badge_ui_update_settings(s_cfg.wifi_ssid, false, s_cfg.base_url, s_cfg.pat_token[0] != '\0');
         bsp_lvgl_unlock();
@@ -511,18 +708,17 @@ void eevee_app_start(void)
 
 void eevee_app_handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
 {
-    // 0. 息屏唤醒：如果处于息屏状态，任意键短按或长按均唤醒屏幕并静默更新数据
+    // 0. 息屏唤醒：如果处于息屏状态，任意键短按或长按均唤醒屏幕并恢复低功耗外设
     if (!s_screen_on) {
         if (event == BSP_BTN_CLICK || event == BSP_BTN_LONG) {
-            s_screen_on = true;
-            s_idle_seconds = 0;
-            bsp_display_backlight(100);
-            ESP_LOGI(TAG, "Screen ON (button press). Polling workflow tasks in background...");
-            // 开屏立即在后台静默轮询最新流程
-            eevee_cmd_t cmd = { .type = CMD_POLL_STATUS };
-            xQueueSend(s_cmd_queue, &cmd, 0);
+            eevee_app_wake_up();
         }
         return; // 唤醒动作拦截本次输入，防止黑暗中误触
+    }
+
+    if (s_just_woke_up) {
+        s_just_woke_up = false;
+        return; // 拦截硬件唤醒伴随的初次按键输入
     }
 
     // 活跃输入：重置无操作空闲计时器
@@ -541,10 +737,8 @@ void eevee_app_handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
     // 1. 长按事件处理
     if (event == BSP_BTN_LONG) {
         if (btn == BSP_BTN_UP) {
-            // 任意页面长按 UP：手动立即息屏
-            s_screen_on = false;
-            bsp_display_backlight(0);
-            ESP_LOGI(TAG, "Screen OFF (manual long press UP). Polling stopped.");
+            // 任意页面长按 UP：手动立即进入低功耗休眠
+            eevee_app_enter_sleep();
             return;
         } else if (btn == BSP_BTN_OK) {
             if (page == EEVEE_PAGE_TASKS) {

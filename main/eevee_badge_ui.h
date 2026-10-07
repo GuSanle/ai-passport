@@ -47,6 +47,11 @@ eevee_ui_page_t eevee_badge_ui_get_page(void);
 void eevee_badge_ui_update_status(bool wifi_connected, int battery_soc);
 
 /**
+ * 刷新顶部状态栏时间与卡面日期
+ */
+void eevee_badge_ui_update_time(const char *time_str, const char *date_str);
+
+/**
  * 刷新个人工牌卡面信息
  */
 void eevee_badge_ui_update_profile(const eevee_profile_t *profile);

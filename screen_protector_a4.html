@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FoloToy AI Passport 屏幕贴膜 1:1 打印裁切模板 (A4)</title>
+  <style>
+    /* 全局重置与排版 */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: #0f172a;
+      color: #334155;
+      line-height: 1.5;
+      padding-bottom: 40px;
+    }
+
+    /* 顶部非打印控制栏 */
+    .no-print-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 10px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #f8fafc;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .toolbar-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      background: #0284c7;
+      color: #ffffff;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .notice-chip {
+      background: #78350f;
+      border: 1px solid #b45309;
+      color: #fef3c7;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+      border: none;
+    }
+    .btn-print {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-print:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    /* 自定义尺寸微调面板 (非打印) */
+    .custom-panel {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 10px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-group label {
+      color: #94a3b8;
+    }
+    .input-group input {
+      width: 65px;
+      padding: 4px 8px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      color: #f8fafc;
+      font-size: 13px;
+      font-family: monospace;
+    }
+
+    /* A4 页面容器 */
+    .page-container {
+      display: flex;
+      justify-content: center;
+      padding: 24px 0;
+    }
+    .a4-sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: #ffffff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      padding: 8mm 10mm 6mm 10mm;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .sheet-svg {
+      width: 190mm;
+      height: 279mm;
+      display: block;
+    }
+
+    /* 打印核心规则：严格 1:1，移除网页杂项 */
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+    @media print {
+      body {
+        background: transparent !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-container {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .a4-sheet {
+        width: 190mm !important;
+        height: 277mm !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .sheet-svg {
+        width: 190mm !important;
+        height: 277mm !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 网页预览顶部工具条 (打印时隐藏) -->
+  <aside class="no-print-toolbar no-print">
+    <div class="toolbar-left">
+      <div class="toolbar-title">
+        <span>📐 FoloToy AI Passport 屏幕贴膜裁切图纸</span>
+        <span class="badge">A4 1:1 绝对原寸</span>
+      </div>
+      <div class="notice-chip">
+        ⚠️ 打印关键点：打印窗口中【缩放比例】必须为 100%（实际大小），切勿勾选“适应纸张/缩放以适合”！
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-print" onclick="window.print()">
+        <svg width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+          <path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zm1 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2H6V3zm6 8v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3h8zm1-4a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+        </svg>
+        立即打印 (Print A4)
+      </button>
+    </div>
+  </aside>
+
+  <!-- 实时交互微调条 (打印时隐藏) -->
+  <section class="custom-panel no-print">
+    <span style="font-weight:600; color:#38bdf8;">🎛️ 自定义裁切框微调：</span>
+    <div class="input-group">
+      <label>宽 (mm):</label>
+      <input type="number" id="inp-w" value="30.60" step="0.1" min="10" max="60" oninput="updateCustomBox()">
+    </div>
+    <div class="input-group">
+      <label>高 (mm):</label>
+      <input type="number" id="inp-h" value="40.80" step="0.1" min="10" max="80" oninput="updateCustomBox()">
+    </div>
+    <div class="input-group">
+      <label>圆角 R (mm):</label>
+      <input type="number" id="inp-r" value="2.5" step="0.1" min="0" max="15" oninput="updateCustomBox()">
+    </div>
+    <span style="font-size:12px; color:#94a3b8;">（可在方案三【实时自定义框】中预览并直接打印）</span>
+  </section>
+
+  <!-- A4 纸张主体 -->
+  <main class="page-container">
+    <article class="a4-sheet">
+      <!-- 190mm x 277mm 矢量画布，1单位 = 1mm -->
+      <svg class="sheet-svg" viewBox="0 0 190 277" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <style>
+            .t-title { font-family: -apple-system, sans-serif; font-size: 4.4px; font-weight: bold; fill: #0f172a; }
+            .t-sub { font-family: -apple-system, sans-serif; font-size: 2.3px; fill: #475569; }
+            .t-sec-title { font-family: -apple-system, sans-serif; font-size: 3.0px; font-weight: bold; fill: #1e293b; }
+            .t-sec-desc { font-family: -apple-system, sans-serif; font-size: 2.0px; fill: #64748b; }
+            .t-box-title { font-family: -apple-system, sans-serif; font-size: 2.2px; font-weight: bold; fill: #1e293b; text-anchor: middle; }
+            .t-box-dim { font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 2.0px; font-weight: bold; fill: #0284c7; text-anchor: middle; }
+            .t-box-radius { font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 1.8px; fill: #475569; text-anchor: middle; }
+            .t-ruler-num { font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 2.0px; fill: #0f172a; text-anchor: middle; }
+            .t-ruler-title { font-family: -apple-system, sans-serif; font-size: 2.2px; font-weight: bold; fill: #b45309; }
+            .t-guide-h { font-family: -apple-system, sans-serif; font-size: 2.5px; font-weight: bold; fill: #0f172a; }
+            .t-guide-p { font-family: -apple-system, sans-serif; font-size: 1.95px; fill: #334155; }
+
+            /* 矢量线条与边框样式 */
+            .line-cut { stroke: #000000; stroke-width: 0.22; fill: none; }
+            .line-guide { stroke: #94a3b8; stroke-width: 0.12; stroke-dasharray: 1.2, 0.8; }
+            .line-cross { stroke: #0ea5e9; stroke-width: 0.15; }
+            .line-ruler-base { stroke: #000000; stroke-width: 0.35; }
+            .line-tick-1 { stroke: #000000; stroke-width: 0.15; }
+            .line-tick-5 { stroke: #000000; stroke-width: 0.25; }
+            .line-tick-10 { stroke: #000000; stroke-width: 0.35; }
+            .card-bg { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 0.15; rx: 1.5; }
+          </style>
+        </defs>
+
+        <!-- ================================================================= -->
+        <!-- 头部：标题与 100mm 实体校准标尺 (0 ~ 23mm) -->
+        <!-- ================================================================= -->
+        <g id="header-section" transform="translate(0, 0)">
+          <!-- 标题与硬件信息 -->
+          <text x="0" y="4.2" class="t-title">FoloToy AI Passport 屏幕贴膜精准裁切模板</text>
+          <text x="0" y="7.6" class="t-sub">原机屏幕: 2.0" ST7789P3 240×320 | 显示视窗: 30.60 × 40.80 mm | A4 1:1 绝对原寸手工/开模版型</text>
+
+          <!-- 100 mm 实体校准尺容器 (y=9 到 y=21) -->
+          <g transform="translate(0, 9.5)">
+            <rect x="0" y="0" width="190" height="12.5" fill="#fffbeb" stroke="#fde68a" stroke-width="0.25" rx="1.5" />
+            
+            <!-- 标尺左侧文字 -->
+            <text x="3" y="4.5" class="t-ruler-title">📏 100 mm 实体校准尺</text>
+            <text x="3" y="7.5" font-family="-apple-system, sans-serif" font-size="1.8px" fill="#78350f">打印后请用直尺精确测量右侧 0~100 刻度线，必须刚好等于 10.0 cm！</text>
+            <text x="3" y="10.0" font-family="-apple-system, sans-serif" font-size="1.8px" fill="#b45309">若长度不符，请检查打印对话框设置：缩放必须设为 100%（实际大小），不要选适合页面。</text>
+
+            <!-- 标尺主体 (长 100mm，从 x=75 到 x=175) -->
+            <g transform="translate(75, 0)">
+              <!-- 标尺基线 -->
+              <line x1="0" y1="9.8" x2="100" y2="9.8" class="line-ruler-base" />
+<line x1="0" y1="4.2" x2="0" y2="9.8" class="line-tick-10" />
+              <text x="0" y="3.3" class="t-ruler-num">0</text>
+              <line x1="1" y1="7.4" x2="1" y2="9.8" class="line-tick-1" />
+              <line x1="2" y1="7.4" x2="2" y2="9.8" class="line-tick-1" />
+              <line x1="3" y1="7.4" x2="3" y2="9.8" class="line-tick-1" />
+              <line x1="4" y1="7.4" x2="4" y2="9.8" class="line-tick-1" />
+              <line x1="5" y1="6.0" x2="5" y2="9.8" class="line-tick-5" />
+              <line x1="6" y1="7.4" x2="6" y2="9.8" class="line-tick-1" />
+              <line x1="7" y1="7.4" x2="7" y2="9.8" class="line-tick-1" />
+              <line x1="8" y1="7.4" x2="8" y2="9.8" class="line-tick-1" />
+              <line x1="9" y1="7.4" x2="9" y2="9.8" class="line-tick-1" />
+              <line x1="10" y1="4.2" x2="10" y2="9.8" class="line-tick-10" />
+              <text x="10" y="3.3" class="t-ruler-num">10</text>
+              <line x1="11" y1="7.4" x2="11" y2="9.8" class="line-tick-1" />
+              <line x1="12" y1="7.4" x2="12" y2="9.8" class="line-tick-1" />
+              <line x1="13" y1="7.4" x2="13" y2="9.8" class="line-tick-1" />
+              <line x1="14" y1="7.4" x2="14" y2="9.8" class="line-tick-1" />
+              <line x1="15" y1="6.0" x2="15" y2="9.8" class="line-tick-5" />
+              <line x1="16" y1="7.4" x2="16" y2="9.8" class="line-tick-1" />
+              <line x1="17" y1="7.4" x2="17" y2="9.8" class="line-tick-1" />
+              <line x1="18" y1="7.4" x2="18" y2="9.8" class="line-tick-1" />
+              <line x1="19" y1="7.4" x2="19" y2="9.8" class="line-tick-1" />
+              <line x1="20" y1="4.2" x2="20" y2="9.8" class="line-tick-10" />
+              <text x="20" y="3.3" class="t-ruler-num">20</text>
+              <line x1="21" y1="7.4" x2="21" y2="9.8" class="line-tick-1" />
+              <line x1="22" y1="7.4" x2="22" y2="9.8" class="line-tick-1" />
+              <line x1="23" y1="7.4" x2="23" y2="9.8" class="line-tick-1" />
+              <line x1="24" y1="7.4" x2="24" y2="9.8" class="line-tick-1" />
+              <line x1="25" y1="6.0" x2="25" y2="9.8" class="line-tick-5" />
+              <line x1="26" y1="7.4" x2="26" y2="9.8" class="line-tick-1" />
+              <line x1="27" y1="7.4" x2="27" y2="9.8" class="line-tick-1" />
+              <line x1="28" y1="7.4" x2="28" y2="9.8" class="line-tick-1" />
+              <line x1="29" y1="7.4" x2="29" y2="9.8" class="line-tick-1" />
+              <line x1="30" y1="4.2" x2="30" y2="9.8" class="line-tick-10" />
+              <text x="30" y="3.3" class="t-ruler-num">30</text>
+              <line x1="31" y1="7.4" x2="31" y2="9.8" class="line-tick-1" />
+              <line x1="32" y1="7.4" x2="32" y2="9.8" class="line-tick-1" />
+              <line x1="33" y1="7.4" x2="33" y2="9.8" class="line-tick-1" />
+              <line x1="34" y1="7.4" x2="34" y2="9.8" class="line-tick-1" />
+              <line x1="35" y1="6.0" x2="35" y2="9.8" class="line-tick-5" />
+              <line x1="36" y1="7.4" x2="36" y2="9.8" class="line-tick-1" />
+              <line x1="37" y1="7.4" x2="37" y2="9.8" class="line-tick-1" />
+              <line x1="38" y1="7.4" x2="38" y2="9.8" class="line-tick-1" />
+              <line x1="39" y1="7.4" x2="39" y2="9.8" class="line-tick-1" />
+              <line x1="40" y1="4.2" x2="40" y2="9.8" class="line-tick-10" />
+              <text x="40" y="3.3" class="t-ruler-num">40</text>
+              <line x1="41" y1="7.4" x2="41" y2="9.8" class="line-tick-1" />
+              <line x1="42" y1="7.4" x2="42" y2="9.8" class="line-tick-1" />
+              <line x1="43" y1="7.4" x2="43" y2="9.8" class="line-tick-1" />
+              <line x1="44" y1="7.4" x2="44" y2="9.8" class="line-tick-1" />
+              <line x1="45" y1="6.0" x2="45" y2="9.8" class="line-tick-5" />
+              <line x1="46" y1="7.4" x2="46" y2="9.8" class="line-tick-1" />
+              <line x1="47" y1="7.4" x2="47" y2="9.8" class="line-tick-1" />
+              <line x1="48" y1="7.4" x2="48" y2="9.8" class="line-tick-1" />
+              <line x1="49" y1="7.4" x2="49" y2="9.8" class="line-tick-1" />
+              <line x1="50" y1="4.2" x2="50" y2="9.8" class="line-tick-10" />
+              <text x="50" y="3.3" class="t-ruler-num">50</text>
+              <line x1="51" y1="7.4" x2="51" y2="9.8" class="line-tick-1" />
+              <line x1="52" y1="7.4" x2="52" y2="9.8" class="line-tick-1" />
+              <line x1="53" y1="7.4" x2="53" y2="9.8" class="line-tick-1" />
+              <line x1="54" y1="7.4" x2="54" y2="9.8" class="line-tick-1" />
+              <line x1="55" y1="6.0" x2="55" y2="9.8" class="line-tick-5" />
+              <line x1="56" y1="7.4" x2="56" y2="9.8" class="line-tick-1" />
+              <line x1="57" y1="7.4" x2="57" y2="9.8" class="line-tick-1" />
+              <line x1="58" y1="7.4" x2="58" y2="9.8" class="line-tick-1" />
+              <line x1="59" y1="7.4" x2="59" y2="9.8" class="line-tick-1" />
+              <line x1="60" y1="4.2" x2="60" y2="9.8" class="line-tick-10" />
+              <text x="60" y="3.3" class="t-ruler-num">60</text>
+              <line x1="61" y1="7.4" x2="61" y2="9.8" class="line-tick-1" />
+              <line x1="62" y1="7.4" x2="62" y2="9.8" class="line-tick-1" />
+              <line x1="63" y1="7.4" x2="63" y2="9.8" class="line-tick-1" />
+              <line x1="64" y1="7.4" x2="64" y2="9.8" class="line-tick-1" />
+              <line x1="65" y1="6.0" x2="65" y2="9.8" class="line-tick-5" />
+              <line x1="66" y1="7.4" x2="66" y2="9.8" class="line-tick-1" />
+              <line x1="67" y1="7.4" x2="67" y2="9.8" class="line-tick-1" />
+              <line x1="68" y1="7.4" x2="68" y2="9.8" class="line-tick-1" />
+              <line x1="69" y1="7.4" x2="69" y2="9.8" class="line-tick-1" />
+              <line x1="70" y1="4.2" x2="70" y2="9.8" class="line-tick-10" />
+              <text x="70" y="3.3" class="t-ruler-num">70</text>
+              <line x1="71" y1="7.4" x2="71" y2="9.8" class="line-tick-1" />
+              <line x1="72" y1="7.4" x2="72" y2="9.8" class="line-tick-1" />
+              <line x1="73" y1="7.4" x2="73" y2="9.8" class="line-tick-1" />
+              <line x1="74" y1="7.4" x2="74" y2="9.8" class="line-tick-1" />
+              <line x1="75" y1="6.0" x2="75" y2="9.8" class="line-tick-5" />
+              <line x1="76" y1="7.4" x2="76" y2="9.8" class="line-tick-1" />
+              <line x1="77" y1="7.4" x2="77" y2="9.8" class="line-tick-1" />
+              <line x1="78" y1="7.4" x2="78" y2="9.8" class="line-tick-1" />
+              <line x1="79" y1="7.4" x2="79" y2="9.8" class="line-tick-1" />
+              <line x1="80" y1="4.2" x2="80" y2="9.8" class="line-tick-10" />
+              <text x="80" y="3.3" class="t-ruler-num">80</text>
+              <line x1="81" y1="7.4" x2="81" y2="9.8" class="line-tick-1" />
+              <line x1="82" y1="7.4" x2="82" y2="9.8" class="line-tick-1" />
+              <line x1="83" y1="7.4" x2="83" y2="9.8" class="line-tick-1" />
+              <line x1="84" y1="7.4" x2="84" y2="9.8" class="line-tick-1" />
+              <line x1="85" y1="6.0" x2="85" y2="9.8" class="line-tick-5" />
+              <line x1="86" y1="7.4" x2="86" y2="9.8" class="line-tick-1" />
+              <line x1="87" y1="7.4" x2="87" y2="9.8" class="line-tick-1" />
+              <line x1="88" y1="7.4" x2="88" y2="9.8" class="line-tick-1" />
+              <line x1="89" y1="7.4" x2="89" y2="9.8" class="line-tick-1" />
+              <line x1="90" y1="4.2" x2="90" y2="9.8" class="line-tick-10" />
+              <text x="90" y="3.3" class="t-ruler-num">90</text>
+              <line x1="91" y1="7.4" x2="91" y2="9.8" class="line-tick-1" />
+              <line x1="92" y1="7.4" x2="92" y2="9.8" class="line-tick-1" />
+              <line x1="93" y1="7.4" x2="93" y2="9.8" class="line-tick-1" />
+              <line x1="94" y1="7.4" x2="94" y2="9.8" class="line-tick-1" />
+              <line x1="95" y1="6.0" x2="95" y2="9.8" class="line-tick-5" />
+              <line x1="96" y1="7.4" x2="96" y2="9.8" class="line-tick-1" />
+              <line x1="97" y1="7.4" x2="97" y2="9.8" class="line-tick-1" />
+              <line x1="98" y1="7.4" x2="98" y2="9.8" class="line-tick-1" />
+              <line x1="99" y1="7.4" x2="99" y2="9.8" class="line-tick-1" />
+              <line x1="100" y1="4.2" x2="100" y2="9.8" class="line-tick-10" />
+              <text x="100" y="3.3" class="t-ruler-num">100</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- 分割细线 -->
+        <line x1="0" y1="24.5" x2="190" y2="24.5" stroke="#cbd5e1" stroke-width="0.25" />
+
+        <!-- ================================================================= -->
+        <!-- 第一行：标准显示区模板 (30.60 x 40.80 mm，R=2.5mm 和 R=3.0mm) -->
+        <!-- y = 26 到 y = 87 -->
+        <!-- ================================================================= -->
+        <g id="row-1" transform="translate(0, 26.5)">
+          <text x="0" y="3.0" class="t-sec-title">【方案一】标准屏幕显示区 (Active Area) 原厂基准版 — 30.60 × 40.80 mm</text>
+          <text x="0" y="6.2" class="t-sec-desc">完美覆盖液晶发光像素区域（240×320 像素，点距 0.1275mm）。建议贴在内侧或屏幕正中，适合高透防刮膜/水凝膜。</text>
+<g transform="translate(5, 9)">
+  <rect x="-3.5" y="-2.5" width="37.6" height="53.8" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.5" y2="0" class="line-guide" />
+  <line x1="28.1" y1="0" x2="33.6" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.8" x2="2.5" y2="40.8" class="line-guide" />
+  <line x1="28.1" y1="40.8" x2="33.6" y2="40.8" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.5" class="line-guide" />
+  <line x1="0" y1="38.3" x2="0" y2="43.8" class="line-guide" />
+  <line x1="30.6" y1="-3.0" x2="30.6" y2="2.5" class="line-guide" />
+  <line x1="30.6" y1="38.3" x2="30.6" y2="43.8" class="line-guide" />
+  <line x1="12.3" y1="20.4" x2="18.3" y2="20.4" class="line-cross" />
+  <line x1="15.3" y1="17.4" x2="15.3" y2="23.4" class="line-cross" />
+  <rect x="0" y="0" width="30.6" height="40.8" rx="2.5" ry="2.5" class="line-cut" />
+  <text x="15.3" y="44.4" class="t-box-title">标准显示区 ①</text>
+  <text x="15.3" y="47.0" class="t-box-dim">30.60 × 40.80 mm</text>
+  <text x="15.3" y="49.4" class="t-box-radius">圆角 R=2.5mm | R=2.5 原厂角</text>
+</g>
+<g transform="translate(52, 9)">
+  <rect x="-3.5" y="-2.5" width="37.6" height="53.8" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.5" y2="0" class="line-guide" />
+  <line x1="28.1" y1="0" x2="33.6" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.8" x2="2.5" y2="40.8" class="line-guide" />
+  <line x1="28.1" y1="40.8" x2="33.6" y2="40.8" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.5" class="line-guide" />
+  <line x1="0" y1="38.3" x2="0" y2="43.8" class="line-guide" />
+  <line x1="30.6" y1="-3.0" x2="30.6" y2="2.5" class="line-guide" />
+  <line x1="30.6" y1="38.3" x2="30.6" y2="43.8" class="line-guide" />
+  <line x1="12.3" y1="20.4" x2="18.3" y2="20.4" class="line-cross" />
+  <line x1="15.3" y1="17.4" x2="15.3" y2="23.4" class="line-cross" />
+  <rect x="0" y="0" width="30.6" height="40.8" rx="2.5" ry="2.5" class="line-cut" />
+  <text x="15.3" y="44.4" class="t-box-title">标准显示区 ②</text>
+  <text x="15.3" y="47.0" class="t-box-dim">30.60 × 40.80 mm</text>
+  <text x="15.3" y="49.4" class="t-box-radius">圆角 R=2.5mm | 备用件 A</text>
+</g>
+<g transform="translate(99, 9)">
+  <rect x="-3.5" y="-2.5" width="37.6" height="53.8" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="3.0" y2="0" class="line-guide" />
+  <line x1="27.6" y1="0" x2="33.6" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.8" x2="3.0" y2="40.8" class="line-guide" />
+  <line x1="27.6" y1="40.8" x2="33.6" y2="40.8" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="3.0" class="line-guide" />
+  <line x1="0" y1="37.8" x2="0" y2="43.8" class="line-guide" />
+  <line x1="30.6" y1="-3.0" x2="30.6" y2="3.0" class="line-guide" />
+  <line x1="30.6" y1="37.8" x2="30.6" y2="43.8" class="line-guide" />
+  <line x1="12.3" y1="20.4" x2="18.3" y2="20.4" class="line-cross" />
+  <line x1="15.3" y1="17.4" x2="15.3" y2="23.4" class="line-cross" />
+  <rect x="0" y="0" width="30.6" height="40.8" rx="3.0" ry="3.0" class="line-cut" />
+  <text x="15.3" y="44.4" class="t-box-title">圆角柔和版 ③</text>
+  <text x="15.3" y="47.0" class="t-box-dim">30.60 × 40.80 mm</text>
+  <text x="15.3" y="49.4" class="t-box-radius">圆角 R=3.0mm | R=3.0 大圆角</text>
+</g>
+<g transform="translate(146, 9)">
+  <rect x="-3.5" y="-2.5" width="37.6" height="53.8" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="3.0" y2="0" class="line-guide" />
+  <line x1="27.6" y1="0" x2="33.6" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.8" x2="3.0" y2="40.8" class="line-guide" />
+  <line x1="27.6" y1="40.8" x2="33.6" y2="40.8" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="3.0" class="line-guide" />
+  <line x1="0" y1="37.8" x2="0" y2="43.8" class="line-guide" />
+  <line x1="30.6" y1="-3.0" x2="30.6" y2="3.0" class="line-guide" />
+  <line x1="30.6" y1="37.8" x2="30.6" y2="43.8" class="line-guide" />
+  <line x1="12.3" y1="20.4" x2="18.3" y2="20.4" class="line-cross" />
+  <line x1="15.3" y1="17.4" x2="15.3" y2="23.4" class="line-cross" />
+  <rect x="0" y="0" width="30.6" height="40.8" rx="3.0" ry="3.0" class="line-cut" />
+  <text x="15.3" y="44.4" class="t-box-title">圆角柔和版 ④</text>
+  <text x="15.3" y="47.0" class="t-box-dim">30.60 × 40.80 mm</text>
+  <text x="15.3" y="49.4" class="t-box-radius">圆角 R=3.0mm | 备用件 B</text>
+</g>
+
+        </g>
+
+        <!-- 分割细线 -->
+        <line x1="0" y1="88" x2="190" y2="88" stroke="#cbd5e1" stroke-width="0.25" />
+
+        <!-- ================================================================= -->
+        <!-- 第二行：外壳开孔微调版 (+0.4mm) 与 防翘微内缩版 (-0.4mm) -->
+        <!-- y = 90 到 y = 150 -->
+        <!-- ================================================================= -->
+        <g id="row-2" transform="translate(0, 90)">
+          <text x="0" y="3.0" class="t-sec-title">【方案二】外壳开孔微调版（外壳沉槽微余量 / 边缘防翘微内缩）</text>
+          <text x="0" y="6.2" class="t-sec-desc">微余量版 (+0.4mm) 覆盖外壳沉槽边缘，防止露黑边；微内缩版 (-0.4mm) 四周预留 0.2mm 空隙，手残党手工对齐不翘边。</text>
+<g transform="translate(5, 9)">
+  <rect x="-3.5" y="-2.5" width="38.0" height="54.2" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.8" y2="0" class="line-guide" />
+  <line x1="28.2" y1="0" x2="34.0" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="41.2" x2="2.8" y2="41.2" class="line-guide" />
+  <line x1="28.2" y1="41.2" x2="34.0" y2="41.2" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.8" class="line-guide" />
+  <line x1="0" y1="38.400000000000006" x2="0" y2="44.2" class="line-guide" />
+  <line x1="31.0" y1="-3.0" x2="31.0" y2="2.8" class="line-guide" />
+  <line x1="31.0" y1="38.400000000000006" x2="31.0" y2="44.2" class="line-guide" />
+  <line x1="12.5" y1="20.6" x2="18.5" y2="20.6" class="line-cross" />
+  <line x1="15.5" y1="17.6" x2="15.5" y2="23.6" class="line-cross" />
+  <rect x="0" y="0" width="31.0" height="41.2" rx="2.8" ry="2.8" class="line-cut" />
+  <text x="15.5" y="44.800000000000004" class="t-box-title">沉槽微余量 ①</text>
+  <text x="15.5" y="47.400000000000006" class="t-box-dim">31.00 × 41.20 mm</text>
+  <text x="15.5" y="49.800000000000004" class="t-box-radius">圆角 R=2.8mm | 宽+0.4 高+0.4</text>
+</g>
+<g transform="translate(52, 9)">
+  <rect x="-3.5" y="-2.5" width="38.0" height="54.2" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.8" y2="0" class="line-guide" />
+  <line x1="28.2" y1="0" x2="34.0" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="41.2" x2="2.8" y2="41.2" class="line-guide" />
+  <line x1="28.2" y1="41.2" x2="34.0" y2="41.2" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.8" class="line-guide" />
+  <line x1="0" y1="38.400000000000006" x2="0" y2="44.2" class="line-guide" />
+  <line x1="31.0" y1="-3.0" x2="31.0" y2="2.8" class="line-guide" />
+  <line x1="31.0" y1="38.400000000000006" x2="31.0" y2="44.2" class="line-guide" />
+  <line x1="12.5" y1="20.6" x2="18.5" y2="20.6" class="line-cross" />
+  <line x1="15.5" y1="17.6" x2="15.5" y2="23.6" class="line-cross" />
+  <rect x="0" y="0" width="31.0" height="41.2" rx="2.8" ry="2.8" class="line-cut" />
+  <text x="15.5" y="44.800000000000004" class="t-box-title">沉槽微余量 ②</text>
+  <text x="15.5" y="47.400000000000006" class="t-box-dim">31.00 × 41.20 mm</text>
+  <text x="15.5" y="49.800000000000004" class="t-box-radius">圆角 R=2.8mm | 备用件 C</text>
+</g>
+<g transform="translate(99, 9)">
+  <rect x="-3.5" y="-2.5" width="37.2" height="53.4" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.5" y2="0" class="line-guide" />
+  <line x1="27.7" y1="0" x2="33.2" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.4" x2="2.5" y2="40.4" class="line-guide" />
+  <line x1="27.7" y1="40.4" x2="33.2" y2="40.4" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.5" class="line-guide" />
+  <line x1="0" y1="37.9" x2="0" y2="43.4" class="line-guide" />
+  <line x1="30.2" y1="-3.0" x2="30.2" y2="2.5" class="line-guide" />
+  <line x1="30.2" y1="37.9" x2="30.2" y2="43.4" class="line-guide" />
+  <line x1="12.1" y1="20.2" x2="18.1" y2="20.2" class="line-cross" />
+  <line x1="15.1" y1="17.2" x2="15.1" y2="23.2" class="line-cross" />
+  <rect x="0" y="0" width="30.2" height="40.4" rx="2.5" ry="2.5" class="line-cut" />
+  <text x="15.1" y="44.0" class="t-box-title">防翘微内缩 ③</text>
+  <text x="15.1" y="46.6" class="t-box-dim">30.20 × 40.40 mm</text>
+  <text x="15.1" y="49.0" class="t-box-radius">圆角 R=2.5mm | 宽-0.4 高-0.4</text>
+</g>
+<g transform="translate(146, 9)">
+  <rect x="-3.5" y="-2.5" width="37.2" height="53.4" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="2.5" y2="0" class="line-guide" />
+  <line x1="27.7" y1="0" x2="33.2" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="40.4" x2="2.5" y2="40.4" class="line-guide" />
+  <line x1="27.7" y1="40.4" x2="33.2" y2="40.4" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="2.5" class="line-guide" />
+  <line x1="0" y1="37.9" x2="0" y2="43.4" class="line-guide" />
+  <line x1="30.2" y1="-3.0" x2="30.2" y2="2.5" class="line-guide" />
+  <line x1="30.2" y1="37.9" x2="30.2" y2="43.4" class="line-guide" />
+  <line x1="12.1" y1="20.2" x2="18.1" y2="20.2" class="line-cross" />
+  <line x1="15.1" y1="17.2" x2="15.1" y2="23.2" class="line-cross" />
+  <rect x="0" y="0" width="30.2" height="40.4" rx="2.5" ry="2.5" class="line-cut" />
+  <text x="15.1" y="44.0" class="t-box-title">防翘微内缩 ④</text>
+  <text x="15.1" y="46.6" class="t-box-dim">30.20 × 40.40 mm</text>
+  <text x="15.1" y="49.0" class="t-box-radius">圆角 R=2.5mm | 备用件 D</text>
+</g>
+
+        </g>
+
+        <!-- 分割细线 -->
+        <line x1="0" y1="152" x2="190" y2="152" stroke="#cbd5e1" stroke-width="0.25" />
+
+        <!-- ================================================================= -->
+        <!-- 第三部分：底部综合区 (y = 154 到 y = 273) -->
+        <!-- 左侧：内部整板 + 自定义框 + 操作指南 -->
+        <!-- 右侧：整机 1:1 对照外壳 -->
+        <!-- ================================================================= -->
+        <g id="row-3" transform="translate(0, 154)">
+          <text x="0" y="3.0" class="t-sec-title">【方案三】整机 1:1 原寸轮廓比对 (60×95mm) &amp; 内部整板 &amp; 自定义框</text>
+          <text x="0" y="6.2" class="t-sec-desc">真机可直接压在右侧外壳轮廓上比对！左侧提供 1 块内部液晶面板尺寸 (35.8×50.8mm) 及网页实时自定义裁切框。</text>
+
+          <!-- 内部完整液晶玻璃面板 (35.8 x 50.8 mm, R=1.0) at x=5, y=9 -->
+<g transform="translate(5, 9)">
+  <rect x="-3.5" y="-2.5" width="42.8" height="63.8" class="card-bg" />
+  <line x1="-3.0" y1="0" x2="1.0" y2="0" class="line-guide" />
+  <line x1="34.8" y1="0" x2="38.8" y2="0" class="line-guide" />
+  <line x1="-3.0" y1="50.8" x2="1.0" y2="50.8" class="line-guide" />
+  <line x1="34.8" y1="50.8" x2="38.8" y2="50.8" class="line-guide" />
+  <line x1="0" y1="-3.0" x2="0" y2="1.0" class="line-guide" />
+  <line x1="0" y1="49.8" x2="0" y2="53.8" class="line-guide" />
+  <line x1="35.8" y1="-3.0" x2="35.8" y2="1.0" class="line-guide" />
+  <line x1="35.8" y1="49.8" x2="35.8" y2="53.8" class="line-guide" />
+  <line x1="14.899999999999999" y1="25.4" x2="20.9" y2="25.4" class="line-cross" />
+  <line x1="17.9" y1="22.4" x2="17.9" y2="28.4" class="line-cross" />
+  <rect x="0" y="0" width="35.8" height="50.8" rx="1.0" ry="1.0" class="line-cut" />
+  <text x="17.9" y="54.4" class="t-box-title">内部液晶整板</text>
+  <text x="17.9" y="57.0" class="t-box-dim">35.80 × 50.80 mm</text>
+  <text x="17.9" y="59.4" class="t-box-radius">圆角 R=1.0mm | 覆内部金属框</text>
+</g>
+
+          <!-- 网页实时自定义裁切框 (由上方输入框动态驱动) -->
+          <g id="custom-box-group" transform="translate(50, 9)">
+            <rect x="-3.5" y="-2.5" width="41" height="61" fill="#f0fdf4" stroke="#86efac" stroke-width="0.2" rx="1.5" />
+            
+            <!-- 导向线 -->
+            <line id="c-guide-t1" x1="-3.0" y1="0" x2="2.5" y2="0" class="line-guide" />
+            <line id="c-guide-t2" x1="28.1" y1="0" x2="33.6" y2="0" class="line-guide" />
+            <line id="c-guide-b1" x1="-3.0" y1="40.8" x2="2.5" y2="40.8" class="line-guide" />
+            <line id="c-guide-b2" x1="28.1" y1="40.8" x2="33.6" y2="40.8" class="line-guide" />
+            <line id="c-guide-l1" x1="0" y1="-3.0" x2="0" y2="2.5" class="line-guide" />
+            <line id="c-guide-l2" x1="0" y1="38.3" x2="0" y2="43.8" class="line-guide" />
+            <line id="c-guide-r1" x1="30.6" y1="-3.0" x2="30.6" y2="2.5" class="line-guide" />
+            <line id="c-guide-r2" x1="30.6" y1="38.3" x2="30.6" y2="43.8" class="line-guide" />
+
+            <!-- 中心十字 -->
+            <line id="c-cross-h" x1="12.3" y1="20.4" x2="18.3" y2="20.4" class="line-cross" />
+            <line id="c-cross-v" x1="15.3" y1="17.4" x2="15.3" y2="23.4" class="line-cross" />
+
+            <!-- 自定义裁切矩形 -->
+            <rect id="custom-rect" x="0" y="0" width="30.60" height="40.80" rx="2.5" ry="2.5" stroke="#16a34a" stroke-width="0.25" fill="none" />
+
+            <text x="15.3" y="44.2" class="t-box-title" fill="#15803d">🎯 自定义专属框</text>
+            <text id="custom-dim-text" x="15.3" y="46.8" class="t-box-dim" fill="#16a34a">30.60 × 40.80 mm</text>
+            <text id="custom-r-text" x="15.3" y="49.2" class="t-box-radius">圆角 R=2.5mm (实时微调)</text>
+          </g>
+
+          <!-- 左下：手工制作与贴膜操作指南卡片 -->
+          <g transform="translate(5, 73)">
+            <rect x="-3.5" y="-2.5" width="86" height="44" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.2" rx="1.5" />
+            <text x="0" y="2.2" class="t-guide-h">✂️ 屏幕贴膜手工制作与完美裁切指南：</text>
+            
+            <text x="0" y="6.4" class="t-guide-p" font-weight="bold">1. 打印确认：</text>
+            <text x="14" y="6.4" class="t-guide-p">用直尺核对顶部 100mm 标尺，误差＜0.5mm 方可使用。</text>
+            
+            <text x="0" y="11.2" class="t-guide-p" font-weight="bold">2. 固定膜材：</text>
+            <text x="14" y="11.2" class="t-guide-p">将高透水凝膜/平板防刮膜用无痕美纹胶轻贴固定在纸样上。</text>
+
+            <text x="0" y="16.0" class="t-guide-p" font-weight="bold">3. 裁切四边：</text>
+            <text x="14" y="16.0" class="t-guide-p">钢尺对齐虚线延伸导向线，美工刀切 4 条直线（勿切入圆角）。</text>
+
+            <text x="0" y="20.8" class="t-guide-p" font-weight="bold">4. 剪出圆角：</text>
+            <text x="14" y="20.8" class="t-guide-p">【神技】用普通指甲剪或小弯头剪刀，沿 R2.5 弧线轻剪即成！</text>
+
+            <text x="0" y="25.6" class="t-guide-p" font-weight="bold">5. 贴膜对齐：</text>
+            <text x="14" y="25.6" class="t-guide-p">利用中心十字线对齐屏幕画面，或让 AI Passport 开机点亮。</text>
+
+            <text x="0" y="31.2" font-family="-apple-system, sans-serif" font-size="1.75px" fill="#64748b">💡 建议优先使用【方案一标准版】，若希望边缘完全卡紧可选【方案二微余量版】。</text>
+          </g>
+
+          <!-- 右侧：AI Passport 60 x 95 mm 整机 1:1 实机原寸轮廓 -->
+          <g transform="translate(98, 6.5)">
+            <rect x="-3" y="-2" width="94" height="113" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.2" rx="2" />
+            <text x="44" y="2.6" class="t-box-title" font-weight="bold">AI Passport 整机 1:1 原寸对照基准</text>
+            <text x="44" y="5.2" class="t-box-dim">外轮廓 60.00 × 95.00 mm (真实 1:1)</text>
+
+            <!-- 整机外壳矢量图 (宽60，高95) -->
+            <g transform="translate(14, 7)">
+              <!-- 外壳轮廓路径 -->
+              <path d="
+                M 18, 0 
+                L 42, 0 
+                A 3 3 0 0 1 45, 3
+                L 45, 6
+                L 52, 6 
+                A 8 8 0 0 1 60, 14 
+                L 60, 87 
+                A 8 8 0 0 1 52, 95 
+                L 8, 95 
+                A 8 8 0 0 1 0, 87 
+                L 0, 14 
+                A 8 8 0 0 1 8, 6 
+                L 15, 6 
+                L 15, 3 
+                A 3 3 0 0 1 18, 0 
+                Z" 
+                fill="#f1f5f9" stroke="#334155" stroke-width="0.35" />
+
+              <!-- 顶部挂绳孔 -->
+              <rect x="23" y="1.8" width="14" height="2.8" rx="1.4" ry="1.4" fill="#ffffff" stroke="#64748b" stroke-width="0.2" />
+
+              <!-- 左侧按键与右侧电源键 -->
+              <rect x="-1" y="20" width="1" height="6" fill="#64748b" />
+              <rect x="-1" y="29" width="1" height="6" fill="#64748b" />
+              <rect x="-1" y="38" width="1" height="6" fill="#64748b" />
+              <rect x="60" y="22" width="1" height="7" fill="#64748b" />
+
+              <!-- 屏幕内嵌安装位置 (左边距 11.14mm, 顶边距 12.31mm) -->
+              <g transform="translate(11.14, 12.31)">
+                <!-- 沉槽外沿 -->
+                <rect x="-0.4" y="-0.4" width="31.4" height="41.6" rx="3.0" ry="3.0" fill="#cbd5e1" opacity="0.6" />
+                <!-- 屏幕发光区 -->
+                <rect x="0" y="0" width="30.6" height="40.8" rx="2.5" ry="2.5" fill="#0f172a" stroke="#38bdf8" stroke-width="0.3" />
+                
+                <text x="15.3" y="16.5" fill="#38bdf8" font-size="2.3px" text-anchor="middle" font-weight="bold">AI Passport</text>
+                <text x="15.3" y="20.5" fill="#f8fafc" font-size="2.0px" text-anchor="middle">240 × 320 屏</text>
+                <text x="15.3" y="24.5" fill="#94a3b8" font-size="1.8px" text-anchor="middle">30.60 × 40.80 mm</text>
+                <text x="15.3" y="28.5" fill="#0284c7" font-size="1.6px" text-anchor="middle">圆角 R=2.5mm</text>
+              </g>
+
+              <!-- 下方电池仓与铭牌区 -->
+              <rect x="11.14" y="58" width="37.7" height="27" rx="2" ry="2" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.2" />
+              <text x="30" y="70" fill="#64748b" font-size="1.9px" text-anchor="middle">520 mAh 电池 / 铭牌区</text>
+              <text x="30" y="74" fill="#94a3b8" font-size="1.7px" text-anchor="middle">Type-C 接口位于底部</text>
+
+              <!-- 底部对比提示 -->
+              <text x="30" y="99" font-family="-apple-system, sans-serif" font-size="1.8px" fill="#475569" text-anchor="middle">将真机直接压在上方核对尺寸</text>
+            </g>
+          </g>
+        </g>
+
+      </svg>
+    </article>
+  </main>
+
+  <!-- 网页端动态微调逻辑 -->
+  <script>
+    function updateCustomBox() {
+      const w = parseFloat(document.getElementById('inp-w').value) || 30.60;
+      const h = parseFloat(document.getElementById('inp-h').value) || 40.80;
+      const r = parseFloat(document.getElementById('inp-r').value) || 2.5;
+
+      const rect = document.getElementById('custom-rect');
+      rect.setAttribute('width', w.toFixed(2));
+      rect.setAttribute('height', h.toFixed(2));
+      rect.setAttribute('rx', r.toFixed(2));
+      rect.setAttribute('ry', r.toFixed(2));
+
+      // Guide lines
+      const ext = 3.0;
+      document.getElementById('c-guide-t1').setAttribute('x2', r.toFixed(2));
+      document.getElementById('c-guide-t2').setAttribute('x1', (w - r).toFixed(2));
+      document.getElementById('c-guide-t2').setAttribute('x2', (w + ext).toFixed(2));
+
+      document.getElementById('c-guide-b1').setAttribute('y1', h.toFixed(2));
+      document.getElementById('c-guide-b1').setAttribute('y2', h.toFixed(2));
+      document.getElementById('c-guide-b1').setAttribute('x2', r.toFixed(2));
+      document.getElementById('c-guide-b2').setAttribute('y1', h.toFixed(2));
+      document.getElementById('c-guide-b2').setAttribute('y2', h.toFixed(2));
+      document.getElementById('c-guide-b2').setAttribute('x1', (w - r).toFixed(2));
+      document.getElementById('c-guide-b2').setAttribute('x2', (w + ext).toFixed(2));
+
+      document.getElementById('c-guide-l1').setAttribute('y2', r.toFixed(2));
+      document.getElementById('c-guide-l2').setAttribute('y1', (h - r).toFixed(2));
+      document.getElementById('c-guide-l2').setAttribute('y2', (h + ext).toFixed(2));
+
+      document.getElementById('c-guide-r1').setAttribute('x1', w.toFixed(2));
+      document.getElementById('c-guide-r1').setAttribute('x2', w.toFixed(2));
+      document.getElementById('c-guide-r1').setAttribute('y2', r.toFixed(2));
+      document.getElementById('c-guide-r2').setAttribute('x1', w.toFixed(2));
+      document.getElementById('c-guide-r2').setAttribute('x2', w.toFixed(2));
+      document.getElementById('c-guide-r2').setAttribute('y1', (h - r).toFixed(2));
+      document.getElementById('c-guide-r2').setAttribute('y2', (h + ext).toFixed(2));
+
+      // Crosshair
+      const cx = w / 2;
+      const cy = h / 2;
+      document.getElementById('c-cross-h').setAttribute('x1', (cx - 3.0).toFixed(2));
+      document.getElementById('c-cross-h').setAttribute('x2', (cx + 3.0).toFixed(2));
+      document.getElementById('c-cross-h').setAttribute('y1', cy.toFixed(2));
+      document.getElementById('c-cross-h').setAttribute('y2', cy.toFixed(2));
+
+      document.getElementById('c-cross-v').setAttribute('x1', cx.toFixed(2));
+      document.getElementById('c-cross-v').setAttribute('x2', cx.toFixed(2));
+      document.getElementById('c-cross-v').setAttribute('y1', (cy - 3.0).toFixed(2));
+      document.getElementById('c-cross-v').setAttribute('y2', (cy + 3.0).toFixed(2));
+
+      // Dim texts
+      document.getElementById('custom-dim-text').textContent = `${w.toFixed(2)} × ${h.toFixed(2)} mm`;
+      document.getElementById('custom-r-text').textContent = `圆角 R=${r.toFixed(1)}mm (实时微调)`;
+    }
+  </script>
+</body>
+</html>

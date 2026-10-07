@@ -24,6 +24,7 @@ static lv_obj_t *s_main_scr;
 static lv_obj_t *s_topbar;
 static lv_obj_t *s_lbl_wifi;
 static lv_obj_t *s_lbl_page_indicator;
+static lv_obj_t *s_lbl_time;
 static lv_obj_t *s_lbl_battery;
 
 static lv_obj_t *s_pages[EEVEE_PAGE_COUNT];
@@ -35,6 +36,7 @@ static lv_obj_t *s_badge_dept_role;
 static lv_obj_t *s_badge_auth_tag;
 static lv_obj_t *s_badge_capsule;
 static lv_obj_t *s_badge_capsule_lbl;
+static lv_obj_t *s_badge_time_lbl;
 
 // Page 1: 待办审批组件
 static lv_obj_t *s_task_counter_lbl;
@@ -147,6 +149,24 @@ void eevee_badge_ui_update_status(bool wifi_connected, int battery_soc)
         lv_label_set_text_fmt(s_lbl_battery, "%d%%", battery_soc);
     } else {
         lv_label_set_text(s_lbl_battery, "--%");
+    }
+}
+
+void eevee_badge_ui_update_time(const char *time_str, const char *date_str)
+{
+    static char s_last_time[16] = {0};
+    if (s_lbl_time && time_str) {
+        if (strcmp(s_last_time, time_str) != 0) {
+            strncpy(s_last_time, time_str, sizeof(s_last_time) - 1);
+            lv_label_set_text(s_lbl_time, time_str);
+        }
+    }
+    static char s_last_date[32] = {0};
+    if (s_badge_time_lbl && date_str) {
+        if (strcmp(s_last_date, date_str) != 0) {
+            strncpy(s_last_date, date_str, sizeof(s_last_date) - 1);
+            lv_label_set_text_fmt(s_badge_time_lbl, "%s · 智能工牌", date_str);
+        }
     }
 }
 
@@ -357,6 +377,15 @@ static void build_page_badge(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_badge_capsule_lbl, eevee_font_get(), 0);
     lv_obj_set_style_text_color(s_badge_capsule_lbl, lv_color_hex(0x065F46), 0);
     lv_obj_center(s_badge_capsule_lbl);
+
+    // 底部日期与工牌状态 (y = 258)
+    s_badge_time_lbl = lv_label_create(card);
+    lv_label_set_text(s_badge_time_lbl, "待网络对时 · 智能工牌");
+    lv_obj_set_style_text_font(s_badge_time_lbl, eevee_font_get(), 0);
+    lv_obj_set_style_text_color(s_badge_time_lbl, lv_color_hex(COLOR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_align(s_badge_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(s_badge_time_lbl, 0, 258);
+    lv_obj_set_width(s_badge_time_lbl, 204);
 }
 
 static void build_page_tasks(lv_obj_t *parent)
@@ -693,19 +722,25 @@ void eevee_badge_ui_init(void)
     lv_label_set_text(s_lbl_wifi, "○ 离线");
     lv_obj_set_style_text_font(s_lbl_wifi, eevee_font_get(), 0);
     lv_obj_set_style_text_color(s_lbl_wifi, lv_color_hex(COLOR_TEXT_MUTED), 0);
-    lv_obj_set_pos(s_lbl_wifi, 10, 4);
+    lv_obj_set_pos(s_lbl_wifi, 8, 4);
 
     s_lbl_page_indicator = lv_label_create(s_topbar);
     lv_label_set_text(s_lbl_page_indicator, "1/5 工牌");
     lv_obj_set_style_text_font(s_lbl_page_indicator, eevee_font_get(), 0);
     lv_obj_set_style_text_color(s_lbl_page_indicator, lv_color_hex(0x94A3B8), 0);
-    lv_obj_center(s_lbl_page_indicator);
+    lv_obj_set_pos(s_lbl_page_indicator, 62, 4);
+
+    s_lbl_time = lv_label_create(s_topbar);
+    lv_label_set_text(s_lbl_time, "--:--");
+    lv_obj_set_style_text_font(s_lbl_time, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(s_lbl_time, lv_color_hex(0xE2E8F0), 0);
+    lv_obj_set_pos(s_lbl_time, 138, 4);
 
     s_lbl_battery = lv_label_create(s_topbar);
     lv_label_set_text(s_lbl_battery, "--%");
     lv_obj_set_style_text_font(s_lbl_battery, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_lbl_battery, lv_color_white(), 0);
-    lv_obj_set_pos(s_lbl_battery, 198, 4);
+    lv_obj_set_pos(s_lbl_battery, 196, 4);
 
     // 2. 主视口与 5 页面创建
     lv_obj_t *viewport = lv_obj_create(s_main_scr);
