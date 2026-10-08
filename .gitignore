@@ -4,7 +4,7 @@ sdkconfig.old
 managed_components/
 .vscode/
 .idea/
-
+.cache/
 # Generated repository-local links; canonical skill sources live in skills/.
 /.agents/skills/passport-develop
 /.agents/skills/passport-setup
