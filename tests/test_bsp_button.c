@@ -66,6 +66,8 @@ esp_err_t iot_button_delete(button_handle_t h) {
     assert(h->driver->del(h->driver) == ESP_OK);
     h->live = false; --live_buttons; return ESP_OK;
 }
+esp_err_t iot_button_stop(void) { return ESP_OK; }
+esp_err_t iot_button_resume(void) { return ESP_OK; }
 esp_err_t iot_button_register_cb(button_handle_t h, button_event_t ev, button_event_args_t *args, button_cb_t cb, void *u) {
     (void)args; (void)ev;
     assert(h->live);
@@ -128,10 +130,13 @@ int main(void) {
     assert(bsp_button_read_mv() == -1);
     fail_read = 0; fail_convert = 1; clock_us += 2000;
     for (int i = 0; i < BSP_BTN_COUNT; ++i) assert(!button_level(&s_drivers[i].base));
-    assert(bsp_button_read_mv() == -1);
+    assert(bsp_button_sleep() == ESP_OK);
+    assert(bsp_button_wake() == ESP_OK);
     fail_delete = 1; button_cleanup();
     assert(adc_live && cal_live && live_buttons == BSP_BTN_COUNT);
     assert(bsp_button_init(event_cb, &events) == ESP_ERR_INVALID_STATE);
     fail_delete = 0; button_cleanup(); retry_success();
+    assert(bsp_button_sleep() == ESP_OK);
+    assert(bsp_button_wake() == ESP_OK);
     puts("BSP button fault-injection tests: PASS");
 }

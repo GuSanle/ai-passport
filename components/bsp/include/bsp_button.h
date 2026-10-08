@@ -31,3 +31,10 @@ esp_err_t bsp_button_init(bsp_btn_cb_t cb, void *user);
 // ★ 换了分压/上拉阻值后,用它测出自己的三档电压,再改 bsp_pins.h 的 BSP_BTN_MV_TABLE。
 // 读取失败返回 -1。
 int bsp_button_read_mv(void);
+
+// 息屏休眠专用:挂起/恢复按键底层定时器(iot_button_stop/resume)。
+// 休眠期间停止 5ms 软件轮询定时器，防止打断 Light Sleep；
+// 唤醒后调用 bsp_button_wake() 恢复定时器和采样。
+esp_err_t bsp_button_sleep(void);
+esp_err_t bsp_button_wake(void);
+

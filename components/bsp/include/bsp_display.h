@@ -46,3 +46,8 @@ struct _lv_display_t *bsp_lvgl_init(void);
 // LVGL 尚未就绪或超时时 lock 返回 false；只有 lock 成功后才调用 unlock。
 bool bsp_lvgl_lock(int timeout_ms);
 void bsp_lvgl_unlock(void);
+
+// 息屏休眠专用:挂起/恢复 LVGL 渲染任务，防止后台周期刷新打断 Light Sleep。
+esp_err_t bsp_lvgl_sleep(void);
+esp_err_t bsp_lvgl_wake(void);
+

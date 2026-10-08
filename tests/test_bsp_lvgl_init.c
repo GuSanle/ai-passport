@@ -20,6 +20,8 @@ esp_err_t lvgl_port_deinit(void) {
     assert(false && "Display rollback must not deinit/reinitialize the live port");
     return ESP_OK;
 }
+esp_err_t lvgl_port_stop(void) { return ESP_OK; }
+esp_err_t lvgl_port_resume(void) { return ESP_OK; }
 bool lvgl_port_lock(uint32_t timeout) {
     (void)timeout; assert(port_live);
     if (fail_lock) return false;
@@ -75,6 +77,8 @@ int main(void) {
     const int before = init_calls;
     assert(bsp_lvgl_init() == &display && init_calls == before);
     assert(bsp_lvgl_lock(5)); bsp_lvgl_unlock();
+    assert(bsp_lvgl_sleep() == ESP_OK);
+    assert(bsp_lvgl_wake() == ESP_OK);
     uint16_t pixels[BSP_LCD_W] = {0};
     for (int x = 0; x < BSP_LCD_W; ++x) pixels[x] = 0xffff;
     display.buffer = (lv_draw_buf_t){ .data = (uint8_t *)pixels, .header.stride = sizeof(pixels) };

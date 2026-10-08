@@ -215,3 +215,15 @@ int bsp_button_read_mv(void) {
     if (adc_cali_raw_to_voltage(s_cali, raw, &mv) != ESP_OK) return -1;
     return mv;
 }
+
+esp_err_t bsp_button_sleep(void) {
+    if (!s_ready) return ESP_OK;
+    return iot_button_stop();
+}
+
+esp_err_t bsp_button_wake(void) {
+    if (!s_ready) return ESP_OK;
+    s_sample_valid = false;
+    return iot_button_resume();
+}
+

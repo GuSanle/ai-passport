@@ -72,6 +72,11 @@ bool eevee_parse_notifications(const char *json_str, eevee_notification_t *out_n
 bool eevee_parse_latest_record(const char *json_str, eevee_record_t *out_record);
 
 /**
+ * 解析 POST /api/v1/apps/:appId/record-drafts/parse 语音/字段解析响应
+ */
+bool eevee_parse_record_draft(const char *json_str, eevee_draft_t *out_draft);
+
+/**
  * 构建 POST /api/iot/tasks/action 请求体 (写入调用方提供的缓冲，避免堆分配)
  */
 bool eevee_build_task_action_body(const char *app_id, const char *record_id,

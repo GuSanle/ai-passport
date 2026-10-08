@@ -92,6 +92,43 @@ void eevee_badge_ui_show_prov_view(bool visible, const char *ap_ssid, const char
  */
 bool eevee_badge_ui_is_prov_view_visible(void);
 
+typedef enum {
+    EEVEE_VOICE_UI_IDLE = 0,
+    EEVEE_VOICE_UI_RECORDING,
+    EEVEE_VOICE_UI_PARSING,
+    EEVEE_VOICE_UI_REVIEW,
+} eevee_voice_ui_state_t;
+
+/**
+ * 显示或隐藏语音录入与草稿确认浮层
+ */
+void eevee_badge_ui_show_voice_view(bool visible);
+
+/**
+ * 判断当前是否处于语音浮层
+ */
+bool eevee_badge_ui_is_voice_view_visible(void);
+
+/**
+ * 获取语音浮层内部交互状态
+ */
+eevee_voice_ui_state_t eevee_badge_ui_get_voice_state(void);
+
+/**
+ * 设置语音浮层为录音状态并更新秒数
+ */
+void eevee_badge_ui_update_voice_recording(int elapsed_sec, int max_sec);
+
+/**
+ * 设置语音浮层为解析状态
+ */
+void eevee_badge_ui_update_voice_parsing(void);
+
+/**
+ * 设置语音浮层为草稿确认状态并展示识别摘要
+ */
+void eevee_badge_ui_update_voice_review(const char *summary);
+
 #ifdef __cplusplus
 }
 #endif

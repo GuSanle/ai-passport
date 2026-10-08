@@ -1,6 +1,7 @@
 #include "eevee_parser.h"
 #include "cJSON.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void safe_copy_str(char *dest, size_t dest_size, const cJSON *item)
@@ -208,6 +209,75 @@ bool eevee_parse_latest_record(const char *json_str, eevee_record_t *out_record)
 
     cJSON_Delete(root);
     return out_record->valid;
+}
+
+bool eevee_parse_record_draft(const char *json_str, eevee_draft_t *out_draft)
+{
+    if (!json_str || !out_draft) return false;
+    memset(out_draft, 0, sizeof(*out_draft));
+
+    cJSON *root = cJSON_Parse(json_str);
+    if (!root) return false;
+
+    cJSON *msg_item = cJSON_GetObjectItem(root, "message");
+    cJSON *transcript_item = cJSON_GetObjectItem(root, "transcript");
+    if (cJSON_IsString(transcript_item) && transcript_item->valuestring) {
+        strncpy(out_draft->transcript, transcript_item->valuestring, sizeof(out_draft->transcript) - 1);
+        out_draft->transcript[sizeof(out_draft->transcript) - 1] = '\0';
+    }
+
+    cJSON *values_item = cJSON_GetObjectItem(root, "values");
+    if (values_item && cJSON_IsObject(values_item)) {
+        char *rendered = cJSON_PrintUnformatted(values_item);
+        if (rendered) {
+            strncpy(out_draft->raw_values_json, rendered, sizeof(out_draft->raw_values_json) - 1);
+            out_draft->raw_values_json[sizeof(out_draft->raw_values_json) - 1] = '\0';
+            free(rendered);
+            out_draft->valid = true;
+        }
+    }
+
+    cJSON *summary_item = cJSON_GetObjectItem(root, "summary");
+    if (cJSON_IsString(summary_item) && summary_item->valuestring && summary_item->valuestring[0] != '\0') {
+        strncpy(out_draft->summary, summary_item->valuestring, sizeof(out_draft->summary) - 1);
+        out_draft->summary[sizeof(out_draft->summary) - 1] = '\0';
+    }
+
+    if (out_draft->summary[0] == '\0') {
+        cJSON *fields_arr = cJSON_GetObjectItem(root, "fields");
+        if (fields_arr && cJSON_IsArray(fields_arr)) {
+            size_t written = 0;
+            int sz = cJSON_GetArraySize(fields_arr);
+            for (int i = 0; i < sz && written < sizeof(out_draft->summary) - 1; i++) {
+                cJSON *f = cJSON_GetArrayItem(fields_arr, i);
+                if (!f) continue;
+                cJSON *lbl = cJSON_GetObjectItem(f, "label");
+                cJSON *val = cJSON_GetObjectItem(f, "displayValue");
+                if (cJSON_IsString(lbl) && cJSON_IsString(val)) {
+                    int n = snprintf(out_draft->summary + written,
+                                     sizeof(out_draft->summary) - written,
+                                     "%s%s: %s",
+                                     (written > 0) ? ", " : "",
+                                     lbl->valuestring, val->valuestring);
+                    if (n > 0) written += (size_t)n;
+                }
+            }
+        }
+        out_draft->summary[sizeof(out_draft->summary) - 1] = '\0';
+    }
+
+    if (out_draft->summary[0] == '\0' && out_draft->transcript[0] != '\0') {
+        strncpy(out_draft->summary, out_draft->transcript, sizeof(out_draft->summary) - 1);
+        out_draft->summary[sizeof(out_draft->summary) - 1] = '\0';
+    }
+
+    if (!out_draft->valid && cJSON_IsString(msg_item) && msg_item->valuestring) {
+        strncpy(out_draft->summary, msg_item->valuestring, sizeof(out_draft->summary) - 1);
+        out_draft->summary[sizeof(out_draft->summary) - 1] = '\0';
+    }
+
+    cJSON_Delete(root);
+    return out_draft->valid;
 }
 
 bool eevee_build_task_action_body(const char *app_id, const char *record_id,

@@ -124,12 +124,36 @@ static void test_builders(void)
     assert(strcmp(buf, "{\"id\":\"notif_123\"}") == 0);
 }
 
+static void test_parse_record_draft(void)
+{
+    const char *json_ready = "{\"transcript\":\"温度25\",\"summary\":\"温度（℃）：25\",\"values\":{\"temperature\":25}}";
+    eevee_draft_t draft;
+    bool ok = eevee_parse_record_draft(json_ready, &draft);
+    assert(ok);
+    assert(draft.valid);
+    assert(strcmp(draft.transcript, "温度25") == 0);
+    assert(strcmp(draft.summary, "温度（℃）：25") == 0);
+    assert(strstr(draft.raw_values_json, "\"temperature\":25") != NULL);
+
+    // 回退从 fields 提取 summary
+    const char *json_fields = "{\"values\":{\"item\":\"探头\"},\"fields\":[{\"label\":\"物品\",\"displayValue\":\"探头\"}]}";
+    assert(eevee_parse_record_draft(json_fields, &draft));
+    assert(draft.valid);
+    assert(strstr(draft.summary, "物品: 探头") != NULL);
+
+    // 服务端错误提示提取
+    const char *json_err = "{\"statusCode\":503,\"message\":\"AI 解析暂未开通\"}";
+    assert(!eevee_parse_record_draft(json_err, &draft));
+    assert(strcmp(draft.summary, "AI 解析暂未开通") == 0);
+}
+
 int main(void)
 {
     test_parse_me();
     test_parse_tasks();
     test_parse_notifications();
     test_parse_latest_record();
+    test_parse_record_draft();
     test_builders();
     printf("test_eevee_parser: ALL PASS\n");
     return 0;

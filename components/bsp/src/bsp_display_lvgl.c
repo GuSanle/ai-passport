@@ -130,3 +130,14 @@ bool bsp_lvgl_lock(int timeout_ms) {
 void bsp_lvgl_unlock(void) {
     if (s_disp) lvgl_port_unlock();
 }
+
+esp_err_t bsp_lvgl_sleep(void) {
+    if (!s_port_initialized) return ESP_OK;
+    return lvgl_port_stop();
+}
+
+esp_err_t bsp_lvgl_wake(void) {
+    if (!s_port_initialized) return ESP_OK;
+    return lvgl_port_resume();
+}
+

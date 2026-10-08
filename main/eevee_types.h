@@ -5,7 +5,7 @@
 
 #define EEVEE_MAX_STRING_LEN     64
 #define EEVEE_MAX_TITLE_LEN      96
-#define EEVEE_MAX_CONTENT_LEN    160
+#define EEVEE_MAX_CONTENT_LEN    384
 #define EEVEE_MAX_ACTIONS        4
 
 /**
@@ -70,6 +70,17 @@ typedef struct {
     int record_number;
     char summary[EEVEE_MAX_CONTENT_LEN];     // 核心指标与键值对摘要
 } eevee_record_t;
+
+/**
+ * 语音解析业务草稿数据模型
+ * 映射至 POST /api/v1/apps/:appId/record-drafts/parse
+ */
+typedef struct {
+    bool valid;
+    char transcript[EEVEE_MAX_CONTENT_LEN];  // 语音识别原文 (如 "温度25")
+    char summary[EEVEE_MAX_CONTENT_LEN];     // 待确认展示摘要 (如 "温度（℃）：25")
+    char raw_values_json[384];               // 提取出的字段键值 JSON 字符串 (如 {"temperature":25})
+} eevee_draft_t;
 
 /**
  * 工牌持久化配置参数模型

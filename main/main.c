@@ -65,12 +65,12 @@ void app_main(void)
         ESP_LOGE(TAG, "Display/LVGL init failed!");
         return;
     }
-    bsp_display_backlight(100);
+    bsp_display_backlight(80);
 
     // 4. 初始化按键驱动与事件队列
     s_input_queue = xQueueCreate(8, sizeof(input_event_t));
     if (s_input_queue) {
-        xTaskCreate(input_task, "btn_dispatch", 2048, NULL, 10, &s_input_task);
+        xTaskCreate(input_task, "btn_dispatch", 4096, NULL, 10, &s_input_task);
     }
     bsp_button_init(on_key, NULL);
     s_input_ready = true;

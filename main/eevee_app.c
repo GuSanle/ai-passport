@@ -48,6 +48,10 @@ static eevee_config_t s_cfg;
 static eevee_profile_t s_profile;
 static eevee_task_t s_curr_task;
 static eevee_record_t s_curr_record;
+static eevee_draft_t s_curr_draft;
+static volatile bool s_voice_recording = false;
+static volatile bool s_voice_abort = false;
+static TaskHandle_t s_voice_task_handle = NULL;
 
 static volatile bool s_wifi_connected = false;
 static volatile bool s_wifi_started = false;
@@ -135,23 +139,29 @@ static void eevee_app_enter_sleep(void)
     s_is_sleeping = true;
     ESP_LOGI(TAG, "Screen OFF -> Entering Stage 1+2 Low-power sleep...");
 
+    if (eevee_badge_ui_is_voice_view_visible()) {
+        s_voice_abort = true;
+        s_voice_recording = false;
+        eevee_badge_ui_show_voice_view(false);
+    }
+
     // 1. 关闭屏幕背光
     bsp_display_backlight(0);
 
-    // 2. 让 ST7789 驱动芯片进入 Sleep In (降低显示驱动功耗)
-    if (bsp_lvgl_lock(250)) {
-        esp_lcd_panel_handle_t panel = bsp_display_panel();
-        if (panel) {
-            esp_lcd_panel_disp_on_off(panel, false);
-            esp_lcd_panel_disp_sleep(panel, true);
-        }
-        bsp_lvgl_unlock();
+    // 2. 挂起 LVGL 渲染任务 (防止后台周期刷新打断 Light Sleep)
+    bsp_lvgl_sleep();
+
+    // 3. 让 ST7789 驱动芯片进入 Sleep In (降低显示驱动功耗)
+    esp_lcd_panel_handle_t panel = bsp_display_panel();
+    if (panel) {
+        esp_lcd_panel_disp_on_off(panel, false);
+        esp_lcd_panel_disp_sleep(panel, true);
     }
 
-    // 3. 挂起音频芯片 ES8311 (切断偏置与内部时钟)
+    // 4. 挂起音频芯片 ES8311 (切断偏置与内部时钟)
     bsp_audio_sleep();
 
-    // 4. 挂起 Wi-Fi 射频天线 (切断天线功耗，Flash 中凭据保留)
+    // 5. 挂起 Wi-Fi 射频天线 (切断天线功耗，Flash 中凭据保留)
     if (s_wifi_started) {
         s_wifi_connected = false;
         esp_wifi_disconnect();
@@ -159,6 +169,9 @@ static void eevee_app_enter_sleep(void)
         s_wifi_started = false;
         ESP_LOGI(TAG, "Wi-Fi radio stopped for low power.");
     }
+
+    // 6. 挂起按键底层轮询定时器 (停止 5ms 高频 ADC 采样，防止打断 Light Sleep)
+    bsp_button_sleep();
 }
 
 static void eevee_app_wake_up(void)
@@ -170,13 +183,19 @@ static void eevee_app_wake_up(void)
     s_idle_seconds = 0;
     ESP_LOGI(TAG, "Waking up from sleep mode (Screen ON)...");
 
-    // 1. 唤醒 ST7789 芯片并恢复背光
+    // 1. 恢复按键底层轮询定时器与采样
+    bsp_button_wake();
+
+    // 2. 恢复 LVGL 渲染任务
+    bsp_lvgl_wake();
+
+    // 3. 唤醒 ST7789 芯片并恢复背光
+    esp_lcd_panel_handle_t panel = bsp_display_panel();
+    if (panel) {
+        esp_lcd_panel_disp_sleep(panel, false);
+        esp_lcd_panel_disp_on_off(panel, true);
+    }
     if (bsp_lvgl_lock(250)) {
-        esp_lcd_panel_handle_t panel = bsp_display_panel();
-        if (panel) {
-            esp_lcd_panel_disp_sleep(panel, false);
-            esp_lcd_panel_disp_on_off(panel, true);
-        }
         // 立即刷新一次当前时间与电量
         char time_str[16];
         char date_str[32];
@@ -186,12 +205,12 @@ static void eevee_app_wake_up(void)
         eevee_badge_ui_update_status(false, bsp_battery_soc());
         bsp_lvgl_unlock();
     }
-    bsp_display_backlight(100);
+    bsp_display_backlight(80);
 
-    // 2. 恢复音频芯片
+    // 4. 恢复音频芯片
     bsp_audio_wake();
 
-    // 3. 重新拉起 Wi-Fi (后台静默自动连接，无感恢复)
+    // 5. 重新拉起 Wi-Fi (后台静默自动连接，无感恢复)
     if (eevee_config_has_wifi(&s_cfg)) {
         ESP_LOGI(TAG, "Restarting Wi-Fi in background...");
         s_wifi_started = true;
@@ -342,6 +361,57 @@ static void do_poll_status(void)
     }
 }
 
+static void voice_progress_cb(int elapsed_sec, void *user_data)
+{
+    (void)user_data;
+    if (bsp_lvgl_lock(100)) {
+        eevee_badge_ui_update_voice_recording(elapsed_sec, 20);
+        bsp_lvgl_unlock();
+    }
+}
+
+static void eevee_voice_task(void *pvParam)
+{
+    (void)pvParam;
+    ESP_LOGI(TAG, "eevee_voice_task started");
+
+    eevee_draft_t draft;
+    memset(&draft, 0, sizeof(draft));
+
+    bool ok = eevee_client_parse_voice_stream(&s_cfg, s_cfg.app_id,
+                                              &s_voice_recording,
+                                              &s_voice_abort,
+                                              voice_progress_cb,
+                                              NULL,
+                                              &draft);
+
+    if (s_voice_abort) {
+        ESP_LOGI(TAG, "Voice task ended by user abort");
+        if (bsp_lvgl_lock(250)) {
+            eevee_badge_ui_show_voice_view(false);
+            eevee_badge_ui_show_toast("已取消录音", 0x64748B);
+            bsp_lvgl_unlock();
+        }
+    } else if (ok && draft.valid) {
+        memcpy(&s_curr_draft, &draft, sizeof(s_curr_draft));
+        if (bsp_lvgl_lock(250)) {
+            eevee_badge_ui_update_voice_review(draft.summary);
+            bsp_lvgl_unlock();
+        }
+    } else {
+        const char *err_msg = (draft.summary[0] != '\0') ? draft.summary : "语音解析失败";
+        if (bsp_lvgl_lock(250)) {
+            eevee_badge_ui_show_voice_view(false);
+            eevee_badge_ui_show_toast(err_msg, 0xEF4444);
+            bsp_lvgl_unlock();
+        }
+    }
+
+    s_voice_recording = false;
+    s_voice_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
 static void eevee_worker_task(void *pvParam)
 {
     (void)pvParam;
@@ -362,8 +432,8 @@ static void eevee_worker_task(void *pvParam)
             gpio_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
             esp_sleep_enable_gpio_wakeup();
 
-            // 2. 配置 15 秒定时器周期唤醒 (推进系统时钟并维持心跳)
-            esp_sleep_enable_timer_wakeup(15ULL * 1000 * 1000);
+            // 2. 配置 60 秒定时器周期唤醒 (防止异常卡死并维持心跳)
+            esp_sleep_enable_timer_wakeup(60ULL * 1000 * 1000);
 
             // 3. 进入 Light Sleep (CPU 暂停，SRAM 保持，整机功耗降至 ~1.5mA)
             esp_light_sleep_start();
@@ -446,7 +516,7 @@ static void eevee_worker_task(void *pvParam)
                     }
                 }
                 break;
-            case CMD_RECORD_REPORT:
+            case CMD_RECORD_REPORT: {
                 if (!s_wifi_connected) {
                     if (bsp_lvgl_lock(250)) {
                         eevee_badge_ui_show_toast("离线无法打卡", 0xEF4444);
@@ -454,33 +524,40 @@ static void eevee_worker_task(void *pvParam)
                     }
                     break;
                 }
-                {
+                bool ok = false;
+                int rec_num = -1;
+                if (s_curr_draft.valid && s_curr_draft.raw_values_json[0] != '\0') {
+                    ok = eevee_client_create_record(&s_cfg, s_cfg.app_id, s_curr_draft.raw_values_json, &rec_num);
+                    memset(&s_curr_draft, 0, sizeof(s_curr_draft));
+                } else {
                     int mv = bsp_battery_mv();
                     float volt = (mv > 2500 && mv < 4500) ? (mv / 1000.0f) : 3.84f;
-                    bool ok = eevee_client_report_record(&s_cfg, s_cfg.app_id, 26.0f, 60.0f, volt);
-                    if (bsp_lvgl_lock(250)) {
-                        eevee_badge_ui_show_toast(ok ? "打卡上报成功" : "上报失败",
-                                                  ok ? 0x10B981 : 0xEF4444);
-                        bsp_lvgl_unlock();
-                    }
-                    if (ok) {
-                        vTaskDelay(pdMS_TO_TICKS(500));
-                        if (eevee_client_fetch_latest_record(&s_cfg, s_cfg.app_id, &s_curr_record)) {
-                            if (bsp_lvgl_lock(250)) {
-                                eevee_badge_ui_update_record(&s_curr_record);
-                                bsp_lvgl_unlock();
-                            }
+                    ok = eevee_client_report_record(&s_cfg, s_cfg.app_id, 26.0f, 60.0f, volt);
+                }
+
+                if (bsp_lvgl_lock(250)) {
+                    eevee_badge_ui_show_toast(ok ? "打卡上报成功" : "上报失败",
+                                              ok ? 0x10B981 : 0xEF4444);
+                    bsp_lvgl_unlock();
+                }
+                if (ok) {
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    if (eevee_client_fetch_latest_record(&s_cfg, s_cfg.app_id, &s_curr_record)) {
+                        if (bsp_lvgl_lock(250)) {
+                            eevee_badge_ui_update_record(&s_curr_record);
+                            bsp_lvgl_unlock();
                         }
                     }
                 }
                 break;
+            }
             default:
                 break;
             }
         }
 
-        // 仅在亮屏且非配网模态时计算超时息屏
-        if (s_screen_on && !eevee_badge_ui_is_prov_view_visible()) {
+        // 仅在亮屏且非配网/非语音模态时计算超时息屏
+        if (s_screen_on && !eevee_badge_ui_is_prov_view_visible() && !eevee_badge_ui_is_voice_view_visible()) {
             s_idle_seconds++;
             if (s_idle_seconds >= SCREEN_OFF_TIMEOUT_SEC) {
                 eevee_app_enter_sleep();
@@ -675,6 +752,9 @@ void eevee_app_start(void)
 {
     ESP_LOGI(TAG, "Starting Eevee Smart Badge Application...");
 
+    if (bsp_audio_init() != ESP_OK) {
+        ESP_LOGW(TAG, "Audio unavailable; voice entry will retry initialization");
+    }
     eevee_config_init(&s_cfg);
     if (bsp_lvgl_lock(1000)) {
         eevee_font_init();
@@ -695,7 +775,7 @@ void eevee_app_start(void)
     }
 
     s_cmd_queue = xQueueCreate(10, sizeof(eevee_cmd_t));
-    xTaskCreate(eevee_worker_task, "eevee_worker", 4096, NULL, 5, &s_worker_handle);
+    xTaskCreate(eevee_worker_task, "eevee_worker", 8192, NULL, 5, &s_worker_handle);
     xTaskCreate(eevee_console_task, "eevee_console", 3072, NULL, 4, &s_console_handle);
 
     wifi_init_sta();
@@ -728,6 +808,62 @@ void eevee_app_handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
     if (eevee_badge_ui_is_prov_view_visible()) {
         if (btn == BSP_BTN_OK && (event == BSP_BTN_CLICK || event == BSP_BTN_LONG)) {
             eevee_app_exit_prov_mode();
+        }
+        return;
+    }
+
+    // 语音模态处于前台时，优先处理语音录入与草稿确认交互
+    if (eevee_badge_ui_is_voice_view_visible()) {
+        eevee_voice_ui_state_t vstate = eevee_badge_ui_get_voice_state();
+        if (event == BSP_BTN_CLICK) {
+            if (vstate == EEVEE_VOICE_UI_RECORDING) {
+                if (btn == BSP_BTN_OK) {
+                    // 短按 OK：主动结束录音并送去解析
+                    ESP_LOGI(TAG, "User clicked OK to finish voice recording");
+                    s_voice_recording = false;
+                    if (bsp_lvgl_lock(250)) {
+                        eevee_badge_ui_update_voice_parsing();
+                        bsp_lvgl_unlock();
+                    }
+                } else if (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) {
+                    // 短按 UP/DOWN：放弃录音并直接丢弃
+                    ESP_LOGI(TAG, "User clicked UP/DOWN to abort voice recording");
+                    s_voice_abort = true;
+                    s_voice_recording = false;
+                }
+            } else if (vstate == EEVEE_VOICE_UI_PARSING) {
+                if (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) {
+                    // 解析中途放弃
+                    ESP_LOGI(TAG, "User cancelled waiting during voice parse");
+                    s_voice_abort = true;
+                    if (bsp_lvgl_lock(250)) {
+                        eevee_badge_ui_show_voice_view(false);
+                        eevee_badge_ui_show_toast("已取消等待", 0x64748B);
+                        bsp_lvgl_unlock();
+                    }
+                }
+            } else if (vstate == EEVEE_VOICE_UI_REVIEW) {
+                if (btn == BSP_BTN_OK) {
+                    // 短按 OK：确认提交打卡草稿
+                    ESP_LOGI(TAG, "User clicked OK to confirm draft report");
+                    if (bsp_lvgl_lock(250)) {
+                        eevee_badge_ui_show_voice_view(false);
+                        eevee_badge_ui_show_toast("正在提交打卡...", 0x2563EB);
+                        bsp_lvgl_unlock();
+                    }
+                    eevee_cmd_t cmd = { .type = CMD_RECORD_REPORT };
+                    xQueueSend(s_cmd_queue, &cmd, 0);
+                } else if (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) {
+                    // 短按 UP/DOWN：取消丢弃草稿
+                    ESP_LOGI(TAG, "User clicked UP/DOWN to discard draft");
+                    memset(&s_curr_draft, 0, sizeof(s_curr_draft));
+                    if (bsp_lvgl_lock(250)) {
+                        eevee_badge_ui_show_voice_view(false);
+                        eevee_badge_ui_show_toast("已取消打卡", 0x64748B);
+                        bsp_lvgl_unlock();
+                    }
+                }
+            }
         }
         return;
     }
@@ -832,8 +968,27 @@ void eevee_app_handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
         }
     } else if (page == EEVEE_PAGE_RECORDS) {
         if (btn == BSP_BTN_OK) {
-            eevee_cmd_t cmd = { .type = CMD_RECORD_REPORT };
-            xQueueSend(s_cmd_queue, &cmd, 0);
+            if (!s_wifi_connected) {
+                if (bsp_lvgl_lock(250)) {
+                    eevee_badge_ui_show_toast("离线无法录音", 0xEF4444);
+                    bsp_lvgl_unlock();
+                }
+                return;
+            }
+            if (s_voice_task_handle != NULL) {
+                ESP_LOGW(TAG, "Voice recording already active, ignoring");
+                return;
+            }
+            ESP_LOGI(TAG, "Starting voice recording modal (click-to-toggle)...");
+            s_voice_recording = true;
+            s_voice_abort = false;
+            memset(&s_curr_draft, 0, sizeof(s_curr_draft));
+            if (bsp_lvgl_lock(250)) {
+                eevee_badge_ui_show_voice_view(true);
+                eevee_badge_ui_update_voice_recording(0, 20);
+                bsp_lvgl_unlock();
+            }
+            xTaskCreate(eevee_voice_task, "eevee_voice", 6144, NULL, 5, &s_voice_task_handle);
         } else if (btn == BSP_BTN_UP) {
             if (bsp_lvgl_lock(250)) {
                 eevee_badge_ui_set_page(EEVEE_PAGE_TASKS);

@@ -52,6 +52,30 @@ bool eevee_client_report_record(const eevee_config_t *cfg,
                                 const char *app_id,
                                 float temp, float hum, float battery_volt);
 
+/**
+ * 录音进度回调 (返回当前已录制秒数)
+ */
+typedef void (*eevee_voice_progress_cb_t)(int elapsed_sec, void *user_data);
+
+/**
+ * 语音流式边录边传并获取解析草稿 (POST /api/v1/apps/:appId/record-drafts/parse)
+ */
+bool eevee_client_parse_voice_stream(const eevee_config_t *cfg,
+                                     const char *app_id,
+                                     volatile bool *p_recording,
+                                     volatile bool *p_abort,
+                                     eevee_voice_progress_cb_t progress_cb,
+                                     void *user_data,
+                                     eevee_draft_t *out_draft);
+
+/**
+ * 提交确认后的草稿业务数据创建记录 (POST /api/v1/apps/:appId/records)
+ */
+bool eevee_client_create_record(const eevee_config_t *cfg,
+                                const char *app_id,
+                                const char *values_json,
+                                int *out_record_number);
+
 #ifdef __cplusplus
 }
 #endif

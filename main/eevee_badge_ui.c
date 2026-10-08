@@ -76,6 +76,17 @@ static lv_obj_t *s_prov_qr;
 static lv_obj_t *s_prov_hint_lbl;
 static bool s_prov_visible = false;
 
+// 语音打卡与草稿确认模态浮层
+static lv_obj_t *s_voice_modal;
+static lv_obj_t *s_voice_title_lbl;
+static lv_obj_t *s_voice_timer_lbl;
+static lv_obj_t *s_voice_detail_lbl;
+static lv_obj_t *s_voice_btn_ok;
+static lv_obj_t *s_voice_btn_ok_lbl;
+static lv_obj_t *s_voice_hint_cancel_lbl;
+static bool s_voice_visible = false;
+static eevee_voice_ui_state_t s_voice_ui_state = EEVEE_VOICE_UI_IDLE;
+
 static void toast_timer_cb(lv_timer_t *timer)
 {
     lv_obj_add_flag(s_toast_panel, LV_OBJ_FLAG_HIDDEN);
@@ -538,7 +549,7 @@ static void build_page_records(lv_obj_t *parent)
     lv_obj_set_style_border_width(btn_act, 0, 0);
 
     lv_obj_t *act_lbl = lv_label_create(btn_act);
-    lv_label_set_text(act_lbl, "[短按 OK] 随身打卡上报");
+    lv_label_set_text(act_lbl, "[短按 OK] 语音录入打卡");
     lv_obj_set_style_text_font(act_lbl, eevee_font_get(), 0);
     lv_obj_set_style_text_color(act_lbl, lv_color_white(), 0);
     lv_obj_center(act_lbl);
@@ -701,6 +712,81 @@ static void build_prov_modal(lv_obj_t *parent)
     lv_obj_set_width(s_prov_hint_lbl, 208);
 }
 
+static void build_voice_modal(lv_obj_t *parent)
+{
+    s_voice_modal = lv_obj_create(parent);
+    lv_obj_remove_flag(s_voice_modal, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(s_voice_modal, 8, 28);
+    lv_obj_set_size(s_voice_modal, 224, 284);
+    lv_obj_set_style_bg_color(s_voice_modal, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_radius(s_voice_modal, 12, 0);
+    lv_obj_set_style_border_color(s_voice_modal, lv_color_hex(0x6366F1), 0);
+    lv_obj_set_style_border_width(s_voice_modal, 2, 0);
+    lv_obj_set_style_pad_all(s_voice_modal, 8, 0);
+    lv_obj_add_flag(s_voice_modal, LV_OBJ_FLAG_HIDDEN);
+
+    s_voice_title_lbl = lv_label_create(s_voice_modal);
+    lv_label_set_text(s_voice_title_lbl, "● 语音打卡录入");
+    lv_obj_set_style_text_font(s_voice_title_lbl, eevee_font_get(), 0);
+    lv_obj_set_style_text_color(s_voice_title_lbl, lv_color_hex(COLOR_DANGER), 0);
+    lv_obj_set_pos(s_voice_title_lbl, 8, 6);
+
+    // 内容卡片容器
+    lv_obj_t *box = lv_obj_create(s_voice_modal);
+    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(box, 4, 32);
+    lv_obj_set_size(box, 200, 160);
+    lv_obj_set_style_bg_color(box, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_radius(box, 8, 0);
+    lv_obj_set_style_border_color(box, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+    lv_obj_set_style_pad_all(box, 6, 0);
+
+    // 录音倒计时大字
+    s_voice_timer_lbl = lv_label_create(box);
+    lv_label_set_text(s_voice_timer_lbl, "00:00 / 00:20");
+    lv_obj_set_style_text_font(s_voice_timer_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(s_voice_timer_lbl, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_align(s_voice_timer_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(s_voice_timer_lbl, 0, 14);
+    lv_obj_set_width(s_voice_timer_lbl, 188);
+
+    // 详细提示 / 识别草稿摘要
+    s_voice_detail_lbl = lv_label_create(box);
+    lv_label_set_text(s_voice_detail_lbl, "请在 20 秒内说完打卡内容\n说话清晰，松开或再次点按即可结束");
+    lv_label_set_long_mode(s_voice_detail_lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(s_voice_detail_lbl, eevee_font_get(), 0);
+    lv_obj_set_style_text_color(s_voice_detail_lbl, lv_color_hex(0xCBD5E1), 0);
+    lv_obj_set_style_text_align(s_voice_detail_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(s_voice_detail_lbl, 0, 56);
+    lv_obj_set_width(s_voice_detail_lbl, 188);
+
+    // 动作按钮条 (OK)
+    s_voice_btn_ok = lv_obj_create(s_voice_modal);
+    lv_obj_remove_flag(s_voice_btn_ok, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(s_voice_btn_ok, 4, 198);
+    lv_obj_set_size(s_voice_btn_ok, 200, 36);
+    lv_obj_set_style_bg_color(s_voice_btn_ok, lv_color_hex(COLOR_PRIMARY), 0);
+    lv_obj_set_style_radius(s_voice_btn_ok, 8, 0);
+    lv_obj_set_style_border_width(s_voice_btn_ok, 0, 0);
+    lv_obj_set_style_pad_all(s_voice_btn_ok, 0, 0);
+
+    s_voice_btn_ok_lbl = lv_label_create(s_voice_btn_ok);
+    lv_label_set_text(s_voice_btn_ok_lbl, "[短按 OK] 结束并解析");
+    lv_obj_set_style_text_font(s_voice_btn_ok_lbl, eevee_font_get(), 0);
+    lv_obj_set_style_text_color(s_voice_btn_ok_lbl, lv_color_white(), 0);
+    lv_obj_center(s_voice_btn_ok_lbl);
+
+    // 底部放弃/取消提示
+    s_voice_hint_cancel_lbl = lv_label_create(s_voice_modal);
+    lv_label_set_text(s_voice_hint_cancel_lbl, "[短按 UP / DOWN] 放弃录音");
+    lv_obj_set_style_text_font(s_voice_hint_cancel_lbl, eevee_font_get(), 0);
+    lv_obj_set_style_text_color(s_voice_hint_cancel_lbl, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_style_text_align(s_voice_hint_cancel_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(s_voice_hint_cancel_lbl, 0, 244);
+    lv_obj_set_width(s_voice_hint_cancel_lbl, 208);
+}
+
 void eevee_badge_ui_init(void)
 {
     s_main_scr = lv_obj_create(NULL);
@@ -783,6 +869,8 @@ void eevee_badge_ui_init(void)
     lv_obj_set_style_text_color(s_toast_lbl, lv_color_white(), 0);
     // 4. 热点配网浮层面板 (默认隐藏)
     build_prov_modal(s_main_scr);
+    // 5. 语音打卡与草稿确认模态面板 (默认隐藏)
+    build_voice_modal(s_main_scr);
 
     eevee_badge_ui_set_page(EEVEE_PAGE_BADGE);
     lv_screen_load(s_main_scr);
@@ -842,4 +930,88 @@ void eevee_badge_ui_show_prov_view(bool visible, const char *ap_ssid, const char
 bool eevee_badge_ui_is_prov_view_visible(void)
 {
     return s_prov_visible;
+}
+
+void eevee_badge_ui_show_voice_view(bool visible)
+{
+    s_voice_visible = visible;
+    if (!s_voice_modal) return;
+    if (visible) {
+        lv_obj_clear_flag(s_voice_modal, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_voice_modal, LV_OBJ_FLAG_HIDDEN);
+        s_voice_ui_state = EEVEE_VOICE_UI_IDLE;
+        update_page_indicator();
+    }
+}
+
+bool eevee_badge_ui_is_voice_view_visible(void)
+{
+    return s_voice_visible;
+}
+
+eevee_voice_ui_state_t eevee_badge_ui_get_voice_state(void)
+{
+    return s_voice_ui_state;
+}
+
+void eevee_badge_ui_update_voice_recording(int elapsed_sec, int max_sec)
+{
+    s_voice_ui_state = EEVEE_VOICE_UI_RECORDING;
+    if (!s_voice_modal) return;
+    lv_label_set_text(s_voice_title_lbl, "● 语音打卡录音中");
+    lv_obj_set_style_text_color(s_voice_title_lbl, lv_color_hex(COLOR_DANGER), 0);
+
+    lv_obj_clear_flag(s_voice_timer_lbl, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text_fmt(s_voice_timer_lbl, "%02d:%02d / %02d:%02d",
+                          elapsed_sec / 60, elapsed_sec % 60,
+                          max_sec / 60, max_sec % 60);
+
+    lv_label_set_text(s_voice_detail_lbl, "请在 20 秒内说完打卡内容\n说话清晰，再次按 OK 结束");
+    lv_obj_set_pos(s_voice_detail_lbl, 0, 56);
+
+    lv_obj_set_style_bg_color(s_voice_btn_ok, lv_color_hex(COLOR_PRIMARY), 0);
+    lv_label_set_text(s_voice_btn_ok_lbl, "[短按 OK] 结束并解析");
+
+    lv_label_set_text(s_voice_hint_cancel_lbl, "[短按 UP / DOWN] 放弃录音");
+}
+
+void eevee_badge_ui_update_voice_parsing(void)
+{
+    s_voice_ui_state = EEVEE_VOICE_UI_PARSING;
+    if (!s_voice_modal) return;
+    lv_label_set_text(s_voice_title_lbl, "● 正在理解分析...");
+    lv_obj_set_style_text_color(s_voice_title_lbl, lv_color_hex(0x38BDF8), 0);
+
+    lv_obj_add_flag(s_voice_timer_lbl, LV_OBJ_FLAG_HIDDEN);
+
+    lv_label_set_text(s_voice_detail_lbl, "模型正在提取字段信息\n请稍候...");
+    lv_obj_set_pos(s_voice_detail_lbl, 0, 48);
+
+    lv_obj_set_style_bg_color(s_voice_btn_ok, lv_color_hex(0x475569), 0);
+    lv_label_set_text(s_voice_btn_ok_lbl, "正在解析中...");
+
+    lv_label_set_text(s_voice_hint_cancel_lbl, "[短按 UP / DOWN] 中止等待");
+}
+
+void eevee_badge_ui_update_voice_review(const char *summary)
+{
+    s_voice_ui_state = EEVEE_VOICE_UI_REVIEW;
+    if (!s_voice_modal) return;
+    lv_label_set_text(s_voice_title_lbl, "● 待确认打卡草稿");
+    lv_obj_set_style_text_color(s_voice_title_lbl, lv_color_hex(COLOR_SUCCESS), 0);
+
+    lv_obj_add_flag(s_voice_timer_lbl, LV_OBJ_FLAG_HIDDEN);
+
+    if (summary && summary[0]) {
+        lv_label_set_text(s_voice_detail_lbl, summary);
+    } else {
+        lv_label_set_text(s_voice_detail_lbl, "已识别并生成打卡记录");
+    }
+    lv_obj_set_pos(s_voice_detail_lbl, 0, 16);
+
+    lv_obj_set_style_bg_color(s_voice_btn_ok, lv_color_hex(COLOR_SUCCESS), 0);
+    lv_label_set_text(s_voice_btn_ok_lbl, "[短按 OK] 确认提交");
+
+    lv_label_set_text(s_voice_hint_cancel_lbl, "[短按 UP / DOWN] 取消丢弃");
 }
